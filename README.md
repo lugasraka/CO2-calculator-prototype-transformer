@@ -1,5 +1,7 @@
 # Transformer Decarbonization Manager
 
+**[▶ Live Demo](https://co2-calculator-prototype-transformer.streamlit.app/)**
+
 A Streamlit prototype for evaluating and simulating CO₂ reduction across the transformer lifecycle — from embodied carbon in materials through to end-of-life recovery.
 
 ## Modules
