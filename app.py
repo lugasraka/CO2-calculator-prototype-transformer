@@ -10,7 +10,8 @@ st.sidebar.title("Decarbonization Workflow")
 module = st.sidebar.radio("Select Module:",
                           ["1. TCO & Carbon ROI",
                            "2. Circularity & EOL Planner",
-                           "3. Portfolio CO₂ Simulator ★"])
+                           "3. Portfolio CO₂ Simulator ★",
+                           "4. About & Source Code"])
 
 if module == "1. TCO & Carbon ROI":
     st.header("Total Cost of Ownership (TCO) & Carbon ROI Calculator")
@@ -519,3 +520,56 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             "Use-phase energy losses (B1–B6) → Module 1 | End-of-life (C1–C4) → Module 2 | "
             "Full cradle-to-grave integration: Phase 2 roadmap item."
         )
+
+elif module == "4. About & Source Code":
+    st.header("About & Source Code")
+    st.markdown(
+        """
+        This app is an open-source concept prototype demonstrating a bottom-up CO₂ management
+        workflow for transformer portfolios, covering TCO analysis, circularity planning, and
+        embodied carbon simulation across lifecycle stages A1–A3.
+        """
+    )
+    st.divider()
+
+    col_gh, col_demo = st.columns(2)
+    with col_gh:
+        st.markdown(
+            """
+            ### Source Code
+            All source code, `requirements.txt`, and documentation are available on GitHub.
+
+            [![GitHub](https://img.shields.io/badge/GitHub-lugasraka%2FCO2--calculator--prototype--transformer-181717?logo=github&logoColor=white)](https://github.com/lugasraka/CO2-calculator-prototype-transformer)
+
+            **[github.com/lugasraka/CO2-calculator-prototype-transformer](https://github.com/lugasraka/CO2-calculator-prototype-transformer)**
+            """
+        )
+    with col_demo:
+        st.markdown(
+            """
+            ### Live Demo
+            The app is deployed on Streamlit Community Cloud.
+
+            [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://co2-calculator-prototype-transformer.streamlit.app/)
+
+            **[co2-calculator-prototype-transformer.streamlit.app](https://co2-calculator-prototype-transformer.streamlit.app/)**
+            """
+        )
+
+    st.divider()
+    st.markdown("### Modules")
+    st.markdown(
+        """
+        | Module | Lifecycle Scope | Description |
+        |--------|----------------|-------------|
+        | **1. TCO & Carbon ROI** | B1–B6 (use phase) | 15-year total cost of ownership comparing standard vs. high-efficiency transformer designs |
+        | **2. Circularity & EOL Planner** | C1–C4 + Module D | Mid-life retrofill and end-of-life decommissioning with material recovery rates |
+        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon calculator across product families and annual volumes |
+        """
+    )
+    st.divider()
+    st.markdown("### Author")
+    st.markdown(
+        "Raka Adrianto · Sustainability, Product, Data · "
+        "[LinkedIn](https://www.linkedin.com/in/raka-adrianto/)"
+    )
