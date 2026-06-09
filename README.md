@@ -28,4 +28,4 @@ streamlit run app.py
 
 ## Author 
 
-- Raka Adrianto | Sustainability, Product, Data [LinkedIn](https://www.linkedin.com/in/raka-adrianto/)
+- Raka Adrianto | Sustainability, Product, Data [LinkedIn](https://www.linkedin.com/in/lugasraka/)
