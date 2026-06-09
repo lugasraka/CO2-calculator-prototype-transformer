@@ -571,5 +571,5 @@ elif module == "4. About & Source Code":
     st.markdown("### Author")
     st.markdown(
         "Raka Adrianto · Sustainability, Product, Data · "
-        "[LinkedIn](https://www.linkedin.com/in/raka-adrianto/)"
+        "[LinkedIn](https://www.linkedin.com/in/lugasraka/)"
     )
