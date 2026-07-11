@@ -3,6 +3,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
+import data_layer as dl
+import scenario_store as store
+
 # Configure the app's layout and title
 st.set_page_config(page_title="Hitachi Energy Decarbonization Manager", layout="wide")
 
@@ -243,32 +246,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         st.markdown("### Material Carbon Intensity Reference — Key Inputs")
         st.caption("Source: Ecoinvent 3.x + Hitachi Energy EconiQ® product declarations + supplier primary data")
 
-        ci_data = {
-            "Material / Option": [
-                "CRGO Steel — Standard sourcing",
-                "CRGO Steel — Green H₂-based sourcing",
-                "Amorphous Metal Alloy (mfg. phase)",
-                "Structural Steel — Standard",
-                "Copper Windings — Standard sourcing",
-                "Copper Windings — Low-carbon (fossil-free refining)",
-                "Virgin Mineral Oil — Baseline",
-                "Re-refined Oil — Nytro RR 900X",
-                "Biodegradable Natural Ester",
-                "Kraft paper / Pressboard insulation",
-            ],
-            "kg CO₂e / kg": [2.5, 0.8, 5.0, 1.8, 3.4, 1.5, 0.85, 0.085, 0.30, 0.5],
-            "vs. Baseline": [
-                "—", "−68%", "Higher mfg, lower op. losses", "—",
-                "—", "−56%", "—", "−90%", "−65%", "—",
-            ],
-            "Supplier programme": [
-                "Standard", "Green steel procurement (SSDP)", "Specialist suppliers", "Standard",
-                "Standard", "Low-carbon Cu programme (e.g. TenneT model)",
-                "Standard", "Circular re-refining (EcoVadis Platinum suppliers)",
-                "Specialist bio-fluid suppliers", "Standard",
-            ],
-        }
-        st.dataframe(ci_data, use_container_width=True, hide_index=True)
+        st.dataframe(dl.reference_table(), use_container_width=True, hide_index=True)
         st.caption(
             "EcoVadis supply chain context: Hitachi Energy avg supplier score 55.6 vs 48.1 global average · "
             "Platinum rating (top 1% of 89,000 companies assessed) · "
@@ -315,30 +293,15 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         )
     st.divider()
 
-    # ── MATERIAL CARBON INTENSITY DATABASE ──────────────────────────────────
-    CORE_CI = {
-        "CRGO Steel — Standard (2.5 kg CO₂e/kg)":         2.5,
-        "CRGO Steel — Green sourcing (0.8 kg CO₂e/kg)":   0.8,
-        "Amorphous Metal Alloy (5.0 kg CO₂e/kg mfg)":     5.0,
-    }
-    FLUID_CI = {
-        "Virgin Mineral Oil — Baseline (0.85 kg CO₂e/kg)":       0.85,
-        "Re-refined Oil — Nytro RR 900X (0.085 kg CO₂e/kg)":     0.085,
-        "Biodegradable Natural Ester (0.30 kg CO₂e/kg)":          0.30,
-    }
-    COPPER_CI = {
-        "Standard Copper (3.4 kg CO₂e/kg)":       3.4,
-        "Low-Carbon Copper (1.5 kg CO₂e/kg)":     1.5,
-    }
-    STRUCT_CI_BASE = 1.8   # standard structural steel kg CO₂e/kg
-    INSUL_CI      = 0.5    # kraft paper / pressboard kg CO₂e/kg (fixed)
+    # ── MATERIAL CARBON INTENSITY DATABASE (loaded from data/ — see data_layer.py) ──
+    CORE_CI = dl.selector_options("core")
+    FLUID_CI = dl.selector_options("fluid")
+    COPPER_CI = dl.selector_options("copper")
+    STRUCT_CI_BASE = dl.baseline_factor("structural")   # standard structural steel kg CO₂e/kg
+    INSUL_CI = dl.baseline_factor("insulation")          # kraft paper / pressboard kg CO₂e/kg (fixed)
 
     # Representative average BOM per transformer class [core_kg, cu_kg, oil_kg, insul_kg, struct_kg]
-    BOM = {
-        "Distribution  (avg 1,000 kVA)":   [500,    150,   500,   50,    300],
-        "Medium Power  (avg 25 MVA)":       [8_000,  3_000, 8_000, 1_000, 6_000],
-        "Large Power   (avg 250 MVA)":      [60_000, 25_000,50_000,8_000, 40_000],
-    }
+    BOM = dl.bom_by_family()
 
     # ── STEP 1 — VOLUME FORECAST ─────────────────────────────────────────────
     st.subheader("Step 1 — Portfolio Volume Forecast")
@@ -374,7 +337,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         core_ci_eco   = CORE_CI[core_choice]
         fluid_ci_eco  = FLUID_CI[fluid_choice]
         copper_ci_eco = COPPER_CI[copper_choice]
-        core_ci_base, fluid_ci_base, copper_ci_base = 2.5, 0.85, 3.4
+        core_ci_base = dl.baseline_factor("core")
+        fluid_ci_base = dl.baseline_factor("fluid")
+        copper_ci_base = dl.baseline_factor("copper")
 
         rows = []
         for (family, masses), vol in zip(BOM.items(), volumes):
@@ -413,6 +378,31 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         total_eco    = df["Portfolio EconiQ (kt/yr)"].sum()
         total_saving = total_base - total_eco
         pct_saving   = total_saving / total_base * 100
+
+        st.session_state["sim"] = {
+            "df": df,
+            "kpis": {
+                "total_base": float(total_base),
+                "total_eco": float(total_eco),
+                "total_saving": float(total_saving),
+                "pct_saving": float(pct_saving),
+            },
+            "choices": {
+                "core": core_choice,
+                "fluid": fluid_choice,
+                "copper": copper_choice,
+            },
+            "volumes": {"dist": vol_dist, "med": vol_med, "large": vol_large},
+        }
+
+    # ── DISPLAY RESULTS (persisted across reruns via session_state) ──────────
+    sim = st.session_state.get("sim")
+    if sim:
+        df           = sim["df"]
+        total_base   = sim["kpis"]["total_base"]
+        total_eco    = sim["kpis"]["total_eco"]
+        total_saving = sim["kpis"]["total_saving"]
+        pct_saving   = sim["kpis"]["pct_saving"]
 
         # ── PORTFOLIO KPI METRICS ─────────────────────────────────────────
         st.subheader("📊 Portfolio-Level CO₂ Output")
@@ -520,6 +510,88 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             "Use-phase energy losses (B1–B6) → Module 1 | End-of-life (C1–C4) → Module 2 | "
             "Full cradle-to-grave integration: Phase 2 roadmap item."
         )
+
+        # ── SAVE & EXPORT THIS RUN ────────────────────────────────────────
+        st.divider()
+        st.subheader("💾 Save & Export Scenario")
+        sc, ec = st.columns([2, 1])
+        with sc:
+            with st.form("save_run_form", clear_on_submit=True):
+                default_name = (
+                    f"{sim['choices']['core'].split(' —')[0]} + "
+                    f"{sim['choices']['copper'].split(' (')[0]}"
+                )
+                run_name = st.text_input("Scenario name", value=default_name)
+                if st.form_submit_button("💾 Save this run", use_container_width=True):
+                    run_id = store.save_run(
+                        name=run_name.strip() or "Untitled scenario",
+                        choices=sim["choices"],
+                        volumes=sim["volumes"],
+                        kpis=sim["kpis"],
+                        results=df,
+                    )
+                    st.success(f"Saved as run #{run_id} — “{run_name}”.")
+        with ec:
+            st.download_button(
+                "⬇ Export results (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name="portfolio_co2_results.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            st.caption("Gate-review-ready per-family CO₂ breakdown.")
+
+    # ── SAVED SCENARIOS — COMPARE (persists across sessions in data/runs.db) ──
+    st.divider()
+    st.subheader("🗂️ Saved Scenarios — Compare")
+    saved = store.list_runs()
+    if saved.empty:
+        st.caption("No saved runs yet. Run a simulation above and click **Save this run**.")
+    else:
+        saved = saved.copy()
+        saved["label"] = saved.apply(
+            lambda r: f"#{r.run_id} · {r['name']} ({r.created_at[:10]})", axis=1
+        )
+        label_to_id = dict(zip(saved["label"], saved["run_id"]))
+        picked = st.multiselect(
+            "Select saved runs to compare",
+            options=list(label_to_id.keys()),
+            default=list(label_to_id.keys())[: min(3, len(label_to_id))],
+        )
+        if picked:
+            ids = [label_to_id[p] for p in picked]
+            comp = saved[saved["run_id"].isin(ids)].set_index("label")
+            kpi_view = comp[
+                ["core_choice", "fluid_choice", "copper_choice",
+                 "total_base", "total_eco", "total_saving", "pct_saving"]
+            ].rename(columns={
+                "core_choice": "Core", "fluid_choice": "Fluid", "copper_choice": "Copper",
+                "total_base": "Baseline (kt/yr)", "total_eco": "EconiQ (kt/yr)",
+                "total_saving": "Saving (kt/yr)", "pct_saving": "% Reduction",
+            })
+            st.dataframe(kpi_view, use_container_width=True)
+
+            fig_cmp = go.Figure()
+            fig_cmp.add_trace(go.Bar(
+                name="Saving (kt/yr)", x=comp.index, y=comp["total_saving"],
+                marker_color="#00CC96",
+            ))
+            fig_cmp.update_layout(
+                title="Portfolio CO₂ Saving by Saved Scenario — kt CO₂e/yr",
+                yaxis_title="kt CO₂e / year",
+                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
+                font_color="white", height=340,
+            )
+            st.plotly_chart(fig_cmp, use_container_width=True)
+
+            del_col1, del_col2 = st.columns([2, 1])
+            with del_col1:
+                to_delete = st.selectbox("Delete a saved run", options=["—"] + picked)
+            with del_col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Delete", use_container_width=True) and to_delete != "—":
+                    store.delete_run(label_to_id[to_delete])
+                    st.rerun()
 
 elif module == "4. About & Source Code":
     st.header("About & Source Code")
