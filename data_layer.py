@@ -32,6 +32,36 @@ def load_bom() -> pd.DataFrame:
     return pd.read_csv(DATA_DIR / "bom.csv")
 
 
+@st.cache_data
+def load_recovery_factors() -> pd.DataFrame:
+    """End-of-life material recovery rates and routes per component."""
+    return pd.read_csv(DATA_DIR / "recovery_factors.csv")
+
+
+def recovery_rates() -> dict:
+    """``{component: recovery_rate}`` for the Module 2 EOL calculator."""
+    df = load_recovery_factors()
+    return {row.component: float(row.recovery_rate) for row in df.itertuples()}
+
+
+@st.cache_data
+def load_energy_params() -> pd.DataFrame:
+    """Operating & evaluation assumptions for the Module 1 TCO/carbon model."""
+    return pd.read_csv(DATA_DIR / "energy_params.csv")
+
+
+def energy_params() -> dict:
+    """``{parameter: value}`` of the sourced energy/evaluation assumptions."""
+    df = load_energy_params()
+    return {row.parameter: float(row.value) for row in df.itertuples()}
+
+
+@st.cache_data
+def load_transformer_presets() -> pd.DataFrame:
+    """Standard vs. EconiQ transformer CAPEX and loss presets per rating."""
+    return pd.read_csv(DATA_DIR / "transformer_presets.csv")
+
+
 def _category(category: str, selectable_only: bool = False) -> pd.DataFrame:
     df = load_material_factors()
     df = df[df["category"] == category]

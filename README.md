@@ -10,8 +10,8 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 
 | Module | Description |
 |--------|-------------|
-| **1. TCO & Carbon ROI** | Compares total cost of ownership between standard and high-efficiency transformer designs over 15 years, including capitalised loss costs. |
-| **2. Circularity & EOL Planner** | Covers end-of-life lifecycle stages (C1–C4): mid-life retrofill vs. structured decommissioning with material recovery rates. |
+| **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
+| **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
 | **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. |
 
 ## Setup
@@ -48,6 +48,8 @@ flowchart TD
     subgraph STORE["🗄️ Data Store"]
         MF["material_factors.csv<br/>coefficients + provenance"]
         BOM["bom.csv<br/>BOM masses"]
+        RF["recovery_factors.csv<br/>EOL recovery rates"]
+        EP["energy_params.csv +<br/>transformer_presets.csv"]
         DB["runs.db (SQLite)<br/>saved scenarios & runs"]
     end
 
@@ -55,11 +57,15 @@ flowchart TD
         FEED["EcoSpace™ / EcoSmart™<br/>live EPD + PLM/BOM feeds"]
     end
 
+    M1 --> CALC
+    M2 --> CALC
     M3 --> CALC
     CALC --> DL
     M3 -->|save / compare / export| SS
     DL --> MF
     DL --> BOM
+    DL --> RF
+    DL --> EP
     SS --> DB
     FEED -.replaces CSVs.-> DL
 
@@ -69,8 +75,11 @@ flowchart TD
 
 **Flow:** Module 3 reads carbon-intensity factors and BOM masses through
 `data_layer.py`, runs the bottom-up calculation, then persists named scenarios and
-their results through `scenario_store.py`. In Phase 2 the static CSVs are swapped
-for live EcoSpace™/EcoSmart™ feeds behind the same data-layer interface.
+their results through `scenario_store.py`. Module 2 reads the same BOM masses,
+baseline factors, and per-material recovery rates to quantify end-of-life recovery
+credits; Module 1 reads sourced energy assumptions and transformer presets to model
+use-phase cost and carbon. All go through the same `data_layer.py` interface, so in
+Phase 2 the static CSVs are swapped for live EcoSpace™/EcoSmart™ feeds behind it.
 
 ## Data model (Phase 1)
 
@@ -103,6 +112,13 @@ erDiagram
         float  mass_kg
         string source
     }
+    RECOVERY_FACTOR {
+        string component PK
+        float  recovery_rate
+        string recovery_route
+        string secondary_material_note
+        string source
+    }
     SCENARIO {
         int    scenario_id PK
         string name
@@ -128,22 +144,27 @@ erDiagram
     SCENARIO ||--|| SIMULATION_RUN : "produces"
     MATERIAL_FACTOR }o--o{ SCENARIO : "chosen as core/fluid/copper lever"
     BOM_LINE }o--o{ SIMULATION_RUN : "aggregated per family"
+    RECOVERY_FACTOR }o--|| BOM_LINE : "recovery rate per component"
 ```
 
-- **`MATERIAL_FACTOR`** and **`BOM_LINE`** are the sourced reference data (CSV, read-only in the app).
+- **`MATERIAL_FACTOR`**, **`BOM_LINE`** and **`RECOVERY_FACTOR`** are the sourced reference data (CSV, read-only in the app).
 - **`SCENARIO`** and **`SIMULATION_RUN`** are user-generated and persisted in `runs.db` (SQLite).
-- Each scenario's lever choices reference a `MATERIAL_FACTOR`; each run aggregates `BOM_LINE` masses into portfolio CO₂ totals.
+- Each scenario's lever choices reference a `MATERIAL_FACTOR`; each run aggregates `BOM_LINE` masses into portfolio CO₂ totals. Module 2 combines `BOM_LINE` masses with `RECOVERY_FACTOR` rates and baseline `MATERIAL_FACTOR` intensities to compute Module D credits.
 
 | File | Purpose |
 |------|---------|
 | `data/material_factors.csv` | Per-material CO₂ intensity (kg CO₂e/kg), uncertainty range, supplier programme, source & version |
 | `data/bom.csv` | Long-format bill-of-material masses per transformer class |
-| `data_layer.py` | Cached access layer exposing factors, BOM and the reference table to the app |
+| `data/recovery_factors.csv` | Per-component end-of-life recovery rates & routes (Module 2 Module D credits) |
+| `data/energy_params.csv` | Operating & evaluation assumptions for Module 1 (grid intensity, energy price, hours, loading, horizon, discount rate) |
+| `data/transformer_presets.csv` | Standard vs. EconiQ CAPEX and loss presets per rating (Module 1) |
+| `data_layer.py` | Cached access layer exposing factors, BOM, recovery rates, energy params and the reference table to the app |
 | `scenario_store.py` | SQLite-backed persistence for named scenarios and simulation runs (`data/runs.db`) |
 
 Module 3 lets you **save named scenarios**, **export** per-family results to CSV,
 and **compare** saved runs side by side. Saved runs persist locally in
-`data/runs.db` (gitignored, regenerated at runtime).
+`data/runs.db` (gitignored, regenerated at runtime). Module 2 exports its
+portfolio and per-component Module D credit tables to CSV.
 
 ## Scope
 

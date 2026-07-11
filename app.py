@@ -18,33 +18,107 @@ module = st.sidebar.radio("Select Module:",
 
 if module == "1. TCO & Carbon ROI":
     st.header("Total Cost of Ownership (TCO) & Carbon ROI Calculator")
-    st.markdown("Evaluate the long-term financial benefits of high-efficiency EconiQ transformers.")
-    
+    st.markdown(
+        "Evaluate the lifetime **cost and carbon** payback of high-efficiency EconiQ transformers. "
+        "Covers **use-phase energy losses (B1–B6)** — the operational footprint outside Modules 2 & 3."
+    )
+
+    params = dl.energy_params()
+    presets = dl.load_transformer_presets()
+    std_p = presets[presets["design"] == "Standard"].iloc[0]
+    eco_p = presets[presets["design"] == "EconiQ"].iloc[0]
+
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Standard 1600 kVA Transformer")
-        std_capex = st.number_input("Standard CAPEX (€)", value=14451)
-        std_no_load = st.number_input("Standard No-Load Loss (W)", value=2800)
-        std_load = st.number_input("Standard Load Loss (W)", value=15207)
-        
+        st.subheader(f"Standard {int(std_p.rating_kva)} kVA Transformer")
+        std_capex = st.number_input("Standard CAPEX (€)", value=float(std_p.capex_eur), format="%.0f")
+        std_no_load = st.number_input("Standard No-Load Loss (W)", value=float(std_p.no_load_w), format="%.0f")
+        std_load = st.number_input("Standard Load Loss (W)", value=float(std_p.load_w), format="%.0f")
     with col2:
-        st.subheader("Efficient EconiQ 1600 kVA Transformer")
-        eco_capex = st.number_input("EconiQ CAPEX (€)", value=14990)
-        eco_no_load = st.number_input("EconiQ No-Load Loss (W)", value=2670)
-        eco_load = st.number_input("EconiQ Load Loss (W)", value=14218)
+        st.subheader(f"Efficient EconiQ {int(eco_p.rating_kva)} kVA Transformer")
+        eco_capex = st.number_input("EconiQ CAPEX (€)", value=float(eco_p.capex_eur), format="%.0f")
+        eco_no_load = st.number_input("EconiQ No-Load Loss (W)", value=float(eco_p.no_load_w), format="%.0f")
+        eco_load = st.number_input("EconiQ Load Loss (W)", value=float(eco_p.load_w), format="%.0f")
 
     st.markdown("---")
-    st.markdown("#### Capitalized Cost of Losses over 15 Years")
-    energy_cost_no_load = st.number_input("Cost per Watt of No-Load Losses (€/W)", value=3.74)
-    energy_cost_load = st.number_input("Cost per Watt of Load Losses (€/W)", value=1.58)
+    st.markdown("#### Operating & Evaluation Assumptions")
+    st.caption("Defaults sourced from `data/energy_params.csv` — override as needed.")
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        energy_price = st.number_input("Energy price (€/kWh)", value=params["energy_price"], step=0.01, format="%.3f")
+        loading = st.slider("Average loading (%)", 0, 100, int(params["loading_factor"] * 100)) / 100
+    with a2:
+        grid_ci = st.number_input("Grid carbon intensity (kg CO₂e/kWh)", value=params["grid_carbon_intensity"], step=0.01, format="%.3f")
+        hours = st.number_input("Operating hours (h/yr)", value=params["operating_hours"], step=100.0, format="%.0f")
+    with a3:
+        eval_years = int(st.number_input("Evaluation period (years)", min_value=1, value=int(params["eval_years"]), step=1))
+        discount_rate = st.number_input("Discount rate (%)", value=params["discount_rate"] * 100, step=0.5, format="%.1f") / 100
 
-    if st.button("Calculate 15-Year TCO"):
-        std_tco = std_capex + (std_no_load * energy_cost_no_load) + (std_load * energy_cost_load)
-        eco_tco = eco_capex + (eco_no_load * energy_cost_no_load) + (eco_load * energy_cost_load)
-        
-        st.success(f"**Standard Transformer Total Owning Cost:** €{std_tco:,.2f}")
-        st.success(f"**EconiQ Transformer Total Owning Cost:** €{eco_tco:,.2f}")
-        st.info(f"**Result:** By investing €{eco_capex - std_capex:,.0f} more upfront, the efficient design yields a lifetime savings of €{std_tco - eco_tco:,.2f} with a payback period of approximately 5 years.")
+    def evaluate(capex: float, no_load_w: float, load_w: float) -> dict:
+        # Load losses scale with the square of loading; no-load losses are constant.
+        annual_kwh = (no_load_w + load_w * loading ** 2) * hours / 1_000
+        annual_cost = annual_kwh * energy_price
+        annual_co2_t = annual_kwh * grid_ci / 1_000
+        npv_energy = sum(annual_cost / (1 + discount_rate) ** y for y in range(1, eval_years + 1))
+        return {
+            "capex": capex,
+            "annual_kwh": annual_kwh,
+            "annual_cost": annual_cost,
+            "annual_co2_t": annual_co2_t,
+            "npv_energy": npv_energy,
+            "tco": capex + npv_energy,
+            "lifetime_co2_t": annual_co2_t * eval_years,
+        }
+
+    std = evaluate(std_capex, std_no_load, std_load)
+    eco = evaluate(eco_capex, eco_no_load, eco_load)
+
+    cost_saving = std["tco"] - eco["tco"]
+    co2_saving = std["lifetime_co2_t"] - eco["lifetime_co2_t"]
+    extra_capex = eco["capex"] - std["capex"]
+    annual_cost_saving = std["annual_cost"] - eco["annual_cost"]
+    payback = extra_capex / annual_cost_saving if annual_cost_saving > 0 else float("inf")
+
+    st.markdown("---")
+    m1, m2, m3 = st.columns(3)
+    m1.metric(f"Lifetime cost saving ({eval_years} yr)", f"€{cost_saving:,.0f}", delta=f"€{extra_capex:,.0f} extra CAPEX")
+    m2.metric(f"Lifetime CO₂ saving ({eval_years} yr)", f"{co2_saving:,.1f} t", delta="use-phase (B1–B6)")
+    m3.metric("Payback period", "n/a" if payback == float("inf") else f"{payback:,.1f} yr", delta="on efficiency premium")
+
+    comp = pd.DataFrame({
+        "Metric": [
+            "CAPEX (€)", "Annual loss energy (kWh)", "Annual energy cost (€)", "Annual CO₂ (t)",
+            f"NPV energy cost @ {discount_rate:.0%} (€)", f"{eval_years}-yr TCO (€)", "Lifetime CO₂ (t)",
+        ],
+        "Standard": [std["capex"], std["annual_kwh"], std["annual_cost"], std["annual_co2_t"],
+                     std["npv_energy"], std["tco"], std["lifetime_co2_t"]],
+        "EconiQ": [eco["capex"], eco["annual_kwh"], eco["annual_cost"], eco["annual_co2_t"],
+                   eco["npv_energy"], eco["tco"], eco["lifetime_co2_t"]],
+    })
+    comp["Standard"] = comp["Standard"].round(1)
+    comp["EconiQ"] = comp["EconiQ"].round(1)
+    st.dataframe(comp, use_container_width=True, hide_index=True)
+
+    # Cumulative discounted cost-of-ownership crossover.
+    years = list(range(0, eval_years + 1))
+
+    def cumulative(capex: float, annual_cost: float) -> list:
+        return [capex + sum(annual_cost / (1 + discount_rate) ** y for y in range(1, k + 1)) for k in years]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=years, y=cumulative(std["capex"], std["annual_cost"]), name="Standard", mode="lines"))
+    fig.add_trace(go.Scatter(x=years, y=cumulative(eco["capex"], eco["annual_cost"]), name="EconiQ", mode="lines"))
+    fig.update_layout(title="Cumulative discounted cost of ownership", xaxis_title="Year", yaxis_title="Cumulative cost (€)")
+    st.plotly_chart(fig, use_container_width=True)
+
+    if cost_saving > 0:
+        st.success(
+            f"**Result:** A €{extra_capex:,.0f} efficiency premium returns **€{cost_saving:,.0f}** over "
+            f"{eval_years} years (payback ≈ {payback:,.1f} yr) and avoids **{co2_saving:,.1f} t CO₂e** "
+            "of use-phase emissions."
+        )
+    else:
+        st.warning("Under these assumptions the standard design has the lower total cost of ownership.")
 
 elif module == "2. Circularity & EOL Planner":
     st.header("♻️ Circularity & End-of-Life Management")
@@ -55,43 +129,140 @@ elif module == "2. Circularity & EOL Planner":
     st.caption("Lifecycle scope: C1 Deconstruction · C2 Transport · C3 Waste processing · C4 Disposal — plus Module D recycling credits")
     st.divider()
 
+    # ── REFERENCE DATA (BOM masses, baseline carbon intensity, recovery rates) ──
+    BOM = dl.bom_by_family()
+    baseline_ci = {c: dl.baseline_factor(c) for c in dl.COMPONENT_ORDER}
+    rec_rates = dl.recovery_rates()
+
+    family = st.selectbox("Transformer class", list(BOM.keys()))
+    masses = dict(zip(dl.COMPONENT_ORDER, BOM[family]))
+
     intervention = st.radio("Select asset lifecycle phase:", ["Mid-Life Extension (C0 intervention)", "End-of-Life Decommissioning (C1–C4)"])
 
     if intervention == "Mid-Life Extension (C0 intervention)":
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.metric("Avoided CO₂", "Up to 90%", delta="vs. full replacement")
-            st.metric("Asset life extension", "+10–15 yrs", delta="without new hardware")
-        with col2:
+        # Retrofill defers manufacturing a replacement unit → avoids its full A1–A3 embodied carbon.
+        embodied_unit = sum(masses[c] * baseline_ci[c] for c in dl.COMPONENT_ORDER) / 1_000  # tonnes CO₂e
+
+        col_in, col_out = st.columns([1, 2])
+        with col_in:
+            installed_base = st.number_input("Installed base of this class (units)", min_value=0, value=200, step=10)
+            retrofill_pct = st.slider("Share undergoing Retrofill instead of replacement (%)", 0, 100, 10)
+        units_retrofilled = installed_base * retrofill_pct / 100
+        fleet_avoided_kt = embodied_unit * units_retrofilled / 1_000
+
+        with col_out:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Avoided CO₂ / retrofill", f"{embodied_unit:,.1f} t", delta="deferred new unit (A1–A3)")
+            m2.metric("Units retrofilled", f"{units_retrofilled:,.0f}", delta="+10–15 yrs asset life each")
+            m3.metric("Fleet CO₂ avoided", f"{fleet_avoided_kt:,.2f} kt", delta="vs. full replacement")
             st.success(
                 "**Recommendation: EconiQ® Retrofill**\n\n"
                 "Replace high-GWP SF₆ insulation gas with an eco-efficient alternative gas mixture. "
                 "Eliminates the embodied carbon of manufacturing a replacement unit and extends the asset's "
                 "functional life without hardware replacement.\n\n"
-                "**Why this matters at portfolio scale:** If 10% of the installed base undergoes Retrofill "
-                "instead of replacement, the avoided manufacturing emissions dwarf the annual A1–A3 "
-                "footprint of the entire new-unit portfolio."
+                f"**At portfolio scale:** retrofilling {retrofill_pct}% of the {installed_base:,} installed "
+                f"**{family.strip()}** units defers **{fleet_avoided_kt:,.2f} kt CO₂e** of A1–A3 manufacturing "
+                "emissions that a full-replacement strategy would otherwise incur."
             )
     else:
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.metric("Copper recovery rate", ">95%", delta="routed to specialist smelters")
-            st.metric("Oil recovery rate", "~90%", delta="re-refined, not incinerated")
-            st.metric("Overall material recyclability", "~85–90%", delta="by mass")
-        with col2:
-            st.info(
-                "**Recommendation: TX Life Replace Protocol**\n\n"
-                "Deploy structured decommissioning manuals for safe disassembly. Key recovery streams:\n\n"
-                "- 🔴 **Copper windings** → specialist smelters (>95% recovery; high value, high embodied carbon avoided)\n"
-                "- 🟡 **CRGO steel core** → steel recycling (reduces Scope 3 of next unit's BOM)\n"
-                "- 🔵 **Insulation oil** → re-refining (Nytro RR 900X circular loop; avoids incineration CO₂)\n"
-                "- ⚠️ **Thermoset plastics / epoxy resins** → current waste challenge; Phase 2 design-for-disassembly target"
-            )
-        st.warning(
-            "📋 **Module D credit (beyond system boundary):** Recycled copper and steel re-entering the supply chain "
-            "generate a carbon credit that offsets future A1–A3 emissions. Quantification of Module D credits is "
-            "included in the Phase 2 full cradle-to-grave LCA roadmap."
+        st.markdown("**Annual decommissioning volume per class**")
+        vcols = st.columns(len(BOM))
+        volumes = {
+            fam_name: col.number_input(fam_name.strip(), min_value=0, value=50, step=5, key=f"eol_vol_{i}")
+            for i, (col, fam_name) in enumerate(zip(vcols, BOM.keys()))
+        }
+
+        def _class_stats(mass_map: dict) -> tuple:
+            total = sum(mass_map.values())
+            recovered = sum(mass_map[c] * rec_rates.get(c, 0.0) for c in dl.COMPONENT_ORDER)
+            credit_unit_t = sum(
+                mass_map[c] * rec_rates.get(c, 0.0) * baseline_ci[c] for c in dl.COMPONENT_ORDER
+            ) / 1_000
+            recyclability = recovered / total * 100 if total else 0
+            return recyclability, credit_unit_t
+
+        # ── PORTFOLIO VIEW (all classes) ──────────────────────────────────────
+        portfolio_rows = []
+        for fam_name, mass_list in BOM.items():
+            mass_map = dict(zip(dl.COMPONENT_ORDER, mass_list))
+            recyclability, credit_unit_t = _class_stats(mass_map)
+            vol = volumes[fam_name]
+            portfolio_rows.append({
+                "Transformer class": fam_name.strip(),
+                "Units/yr": vol,
+                "Recyclability (%)": round(recyclability, 1),
+                "Module D credit/unit (t)": round(credit_unit_t, 2),
+                "Portfolio credit (kt/yr)": round(credit_unit_t * vol / 1_000, 3),
+            })
+        portfolio_df = pd.DataFrame(portfolio_rows)
+        total_portfolio_kt = portfolio_df["Portfolio credit (kt/yr)"].sum()
+        total_units = portfolio_df["Units/yr"].sum()
+
+        st.subheader("🌍 Portfolio Module D Credit — All Classes")
+        p1, p2 = st.columns(2)
+        p1.metric("Fleet decommissioning", f"{total_units:,.0f} units/yr")
+        p2.metric("Total Module D credit", f"{total_portfolio_kt:,.2f} kt/yr", delta="avoided virgin-material CO₂e")
+        st.dataframe(portfolio_df, use_container_width=True, hide_index=True)
+        st.download_button(
+            "⬇ Export portfolio credit (CSV)",
+            portfolio_df.to_csv(index=False).encode("utf-8"),
+            file_name="module_d_portfolio_credit.csv",
+            mime="text/csv",
         )
+
+        # ── COMPONENT DETAIL (selected class) ─────────────────────────────────
+        st.subheader(f"🔍 Component Detail — {family.strip()}")
+        rows = []
+        for component in dl.COMPONENT_ORDER:
+            mass = masses[component]
+            rate = rec_rates.get(component, 0.0)
+            recovered = mass * rate
+            credit_unit_t = recovered * baseline_ci[component] / 1_000  # avoided virgin-material CO₂e
+            rows.append({
+                "Component": component.capitalize(),
+                "Mass (kg)": round(mass, 0),
+                "Recovery rate": f"{rate:.0%}",
+                "Recovered (kg)": round(recovered, 0),
+                "Module D credit/unit (t)": round(credit_unit_t, 2),
+                "Portfolio credit (kt/yr)": round(credit_unit_t * volumes[family] / 1_000, 3),
+            })
+        df = pd.DataFrame(rows)
+
+        recyclability, credit_per_unit_t = _class_stats(masses)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Overall recyclability", f"{recyclability:,.1f}%", delta="by mass")
+        m2.metric("Module D credit / unit", f"{credit_per_unit_t:,.1f} t", delta="avoided virgin-material CO₂e")
+        m3.metric("Class credit", f"{df['Portfolio credit (kt/yr)'].sum():,.2f} kt/yr", delta=f"{volumes[family]:,} units/yr")
+
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.download_button(
+            "⬇ Export component detail (CSV)",
+            df.to_csv(index=False).encode("utf-8"),
+            file_name=f"module_d_detail_{family.strip().split()[0].lower()}.csv",
+            mime="text/csv",
+        )
+
+        fig = px.bar(
+            df, x="Component", y="Module D credit/unit (t)",
+            title="Module D recovery credit by component (per unit)",
+            labels={"Module D credit/unit (t)": "Avoided CO₂e (t/unit)"},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.info(
+            "**Recommendation: TX Life Replace Protocol**\n\n"
+            "Deploy structured decommissioning manuals for safe disassembly. Key recovery streams:\n\n"
+            "- 🔴 **Copper windings** → specialist smelters (high value, high embodied carbon avoided)\n"
+            "- 🟡 **CRGO steel core** → steel recycling (reduces Scope 3 of next unit's BOM)\n"
+            "- 🔵 **Insulation oil** → re-refining (Nytro RR 900X circular loop; avoids incineration CO₂)\n"
+            "- ⚠️ **Thermoset plastics / epoxy resins** → current waste challenge; Phase 2 design-for-disassembly target"
+        )
+        st.warning(
+            "📋 **Module D credit (beyond system boundary):** Recovered copper and steel re-entering the supply chain "
+            "displace virgin material, generating the carbon credit quantified above that offsets future A1–A3 "
+            "emissions. Rates are representative EOL averages (`data/recovery_factors.csv`) pending treatment-partner data."
+        )
+
 
 elif module == "3. Portfolio CO₂ Simulator ★":
     st.title("🌍 Transformer Portfolio CO₂ Simulator")

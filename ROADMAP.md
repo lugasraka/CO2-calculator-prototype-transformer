@@ -27,8 +27,8 @@ Today it is a Streamlit prototype with three modules mapped to lifecycle stages:
 
 | Module | Lifecycle scope | Job-to-be-done |
 |--------|-----------------|----------------|
-| **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via 15-yr total cost of ownership |
-| **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Decide retrofill vs. decommission; maximise material recovery |
+| **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via lifetime TCO, use-phase carbon savings, and payback |
+| **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Quantify retrofill vs. decommission trade-offs and the Module D recovery credit from sourced recovery rates |
 | **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, scenario comparison |
 
 **Target users:** R&D / design engineers, sustainability leads, procurement & supply-chain
@@ -61,6 +61,11 @@ teams, and PLM gate reviewers.
 - ✅ Uncertainty ranges (low / expected / high) on carbon factors.
 - ✅ Save, name, and compare scenarios; persist runs in SQLite (`scenario_store.py`).
 - ✅ Export per-family results (CSV) for gate reviews.
+- ✅ Quantify Module 2 end-of-life outcomes — avoided-replacement carbon (retrofill) and
+  the Module D recovery credit — from a sourced `recovery_factors.csv`, with CSV export.
+- ✅ Model Module 1 use-phase cost **and** carbon from first principles (loss energy →
+  NPV TCO + lifetime CO₂ + payback), with assumptions and design presets sourced from
+  `energy_params.csv` / `transformer_presets.csv`.
 
 ### 🔜 Phase 2 — Real Data Integration  *(3–9 mo)*
 **Theme: connect to live enterprise systems.**
@@ -97,7 +102,7 @@ The core trajectory: **from constants-in-code → a versioned, sourced, relation
 
 | Phase | Data-model evolution |
 |-------|----------------------|
-| **1 (done)** | Coefficients & BOM extracted to sourced CSVs with uncertainty + provenance; scenarios/runs persisted in `scenario` + `simulation_run` tables (SQLite). |
+| **1 (done)** | Coefficients, BOM, EOL recovery rates & energy/evaluation assumptions extracted to sourced CSVs with uncertainty + provenance; scenarios/runs persisted in `scenario` + `simulation_run` tables (SQLite). |
 | **2** | `product` + `bom_line` tables fed by real PLM/ERP; factors gain supplier + lifecycle-stage dimensions; static CSVs swapped for live EPD feed. |
 | **3** | Time-series `volume_forecast` (year × region); optimisation & MAC-curve views read cost + carbon jointly; scenario results become comparable over time. |
 | **4** | Owner / tenant on every record; temporal `valid_from` / `valid_to` on all assumptions; full audit trail for assurance; regional & regulatory dimensions. |
@@ -106,6 +111,7 @@ The core trajectory: **from constants-in-code → a versioned, sourced, relation
 
 - `MATERIAL_FACTOR` — sourced carbon-intensity factors (CSV, read-only)
 - `BOM_LINE` — bill-of-material masses per transformer class (CSV, read-only)
+- `RECOVERY_FACTOR` — per-component end-of-life recovery rates & routes (CSV, read-only)
 - `SCENARIO` — a named set of design-lever choices + volume forecast (SQLite)
 - `SIMULATION_RUN` — computed portfolio results for a scenario (SQLite)
 
