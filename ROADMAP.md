@@ -71,8 +71,10 @@ teams, and PLM gate reviewers.
 **Theme: connect to live enterprise systems.**
 
 - Ingest **actual BOM** from PLM/ERP per real product — not class averages.
-- Live EPD feed (**EcoSpace™ / EcoSmart™**) replacing static factor tables, behind the
+- Live EPD feed replacing static factor tables, behind the
   same data-layer interface.
+  *(An Environmental Product Declaration (EPD) is a standardized, independently verified
+  report of a product's lifecycle environmental impacts, including embodied CO₂.)*
 - **Full lifecycle unification:** merge Modules 1–3 under one cradle-to-grave engine
   (A1–C4 + Module D), with a lifecycle-stage dimension on every emission line.
 - Supplier-specific carbon factors tied to a supplier master.

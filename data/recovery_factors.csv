@@ -1,6 +1,6 @@
 component,recovery_rate,recovery_route,secondary_material_note,source
 core,0.90,Steel recycling (electric-arc remelt),CRGO steel scrap displaces virgin core steel in the next unit's BOM,Representative EOL rate (to be replaced by treatment-partner data)
 copper,0.95,Specialist copper smelters,Recovered copper displaces virgin copper cathode,Representative EOL rate (to be replaced by treatment-partner data)
-fluid,0.90,Re-refining (Nytro RR 900X circular loop),Re-refined oil displaces virgin mineral oil; avoids incineration,Representative EOL rate (to be replaced by treatment-partner data)
+fluid,0.90,Re-refining (circular loop),Re-refined oil displaces virgin mineral oil; avoids incineration,Representative EOL rate (to be replaced by treatment-partner data)
 insulation,0.20,Energy recovery / limited recycling,Kraft paper & thermoset insulation largely non-recovered (Phase 2 design-for-disassembly target),Representative EOL rate (to be replaced by treatment-partner data)
 structural,0.90,Steel recycling,Structural steel scrap displaces virgin steel,Representative EOL rate (to be replaced by treatment-partner data)

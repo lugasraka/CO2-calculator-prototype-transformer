@@ -58,7 +58,7 @@ def energy_params() -> dict:
 
 @st.cache_data
 def load_transformer_presets() -> pd.DataFrame:
-    """Standard vs. EconiQ transformer CAPEX and loss presets per rating."""
+    """Standard vs. Eco-Efficient transformer CAPEX and loss presets per rating."""
     return pd.read_csv(DATA_DIR / "transformer_presets.csv")
 
 

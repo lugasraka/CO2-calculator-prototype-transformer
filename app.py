@@ -7,7 +7,7 @@ import data_layer as dl
 import scenario_store as store
 
 # Configure the app's layout and title
-st.set_page_config(page_title="Hitachi Energy Decarbonization Manager", layout="wide")
+st.set_page_config(page_title="Transformer Decarbonization Manager", layout="wide")
 
 st.sidebar.title("Decarbonization Workflow")
 module = st.sidebar.radio("Select Module:",
@@ -19,14 +19,14 @@ module = st.sidebar.radio("Select Module:",
 if module == "1. TCO & Carbon ROI":
     st.header("Total Cost of Ownership (TCO) & Carbon ROI Calculator")
     st.markdown(
-        "Evaluate the lifetime **cost and carbon** payback of high-efficiency EconiQ transformers. "
+        "Evaluate the lifetime **cost and carbon** payback of high-efficiency transformers. "
         "Covers **use-phase energy losses (B1–B6)** — the operational footprint outside Modules 2 & 3."
     )
 
     params = dl.energy_params()
     presets = dl.load_transformer_presets()
     std_p = presets[presets["design"] == "Standard"].iloc[0]
-    eco_p = presets[presets["design"] == "EconiQ"].iloc[0]
+    eco_p = presets[presets["design"] == "Eco-Efficient"].iloc[0]
 
     col1, col2 = st.columns(2)
     with col1:
@@ -35,10 +35,10 @@ if module == "1. TCO & Carbon ROI":
         std_no_load = st.number_input("Standard No-Load Loss (W)", value=float(std_p.no_load_w), format="%.0f")
         std_load = st.number_input("Standard Load Loss (W)", value=float(std_p.load_w), format="%.0f")
     with col2:
-        st.subheader(f"Efficient EconiQ {int(eco_p.rating_kva)} kVA Transformer")
-        eco_capex = st.number_input("EconiQ CAPEX (€)", value=float(eco_p.capex_eur), format="%.0f")
-        eco_no_load = st.number_input("EconiQ No-Load Loss (W)", value=float(eco_p.no_load_w), format="%.0f")
-        eco_load = st.number_input("EconiQ Load Loss (W)", value=float(eco_p.load_w), format="%.0f")
+        st.subheader(f"Eco-Efficient {int(eco_p.rating_kva)} kVA Transformer")
+        eco_capex = st.number_input("Eco-Efficient CAPEX (€)", value=float(eco_p.capex_eur), format="%.0f")
+        eco_no_load = st.number_input("Eco-Efficient No-Load Loss (W)", value=float(eco_p.no_load_w), format="%.0f")
+        eco_load = st.number_input("Eco-Efficient Load Loss (W)", value=float(eco_p.load_w), format="%.0f")
 
     st.markdown("---")
     st.markdown("#### Operating & Evaluation Assumptions")
@@ -92,11 +92,11 @@ if module == "1. TCO & Carbon ROI":
         ],
         "Standard": [std["capex"], std["annual_kwh"], std["annual_cost"], std["annual_co2_t"],
                      std["npv_energy"], std["tco"], std["lifetime_co2_t"]],
-        "EconiQ": [eco["capex"], eco["annual_kwh"], eco["annual_cost"], eco["annual_co2_t"],
-                   eco["npv_energy"], eco["tco"], eco["lifetime_co2_t"]],
+        "Eco-Efficient": [eco["capex"], eco["annual_kwh"], eco["annual_cost"], eco["annual_co2_t"],
+                          eco["npv_energy"], eco["tco"], eco["lifetime_co2_t"]],
     })
     comp["Standard"] = comp["Standard"].round(1)
-    comp["EconiQ"] = comp["EconiQ"].round(1)
+    comp["Eco-Efficient"] = comp["Eco-Efficient"].round(1)
     st.dataframe(comp, use_container_width=True, hide_index=True)
 
     # Cumulative discounted cost-of-ownership crossover.
@@ -107,7 +107,7 @@ if module == "1. TCO & Carbon ROI":
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=years, y=cumulative(std["capex"], std["annual_cost"]), name="Standard", mode="lines"))
-    fig.add_trace(go.Scatter(x=years, y=cumulative(eco["capex"], eco["annual_cost"]), name="EconiQ", mode="lines"))
+    fig.add_trace(go.Scatter(x=years, y=cumulative(eco["capex"], eco["annual_cost"]), name="Eco-Efficient", mode="lines"))
     fig.update_layout(title="Cumulative discounted cost of ownership", xaxis_title="Year", yaxis_title="Cumulative cost (€)")
     st.plotly_chart(fig, use_container_width=True)
 
@@ -156,7 +156,7 @@ elif module == "2. Circularity & EOL Planner":
             m2.metric("Units retrofilled", f"{units_retrofilled:,.0f}", delta="+10–15 yrs asset life each")
             m3.metric("Fleet CO₂ avoided", f"{fleet_avoided_kt:,.2f} kt", delta="vs. full replacement")
             st.success(
-                "**Recommendation: EconiQ® Retrofill**\n\n"
+                "**Recommendation: Fluid Retrofill**\n\n"
                 "Replace high-GWP SF₆ insulation gas with an eco-efficient alternative gas mixture. "
                 "Eliminates the embodied carbon of manufacturing a replacement unit and extends the asset's "
                 "functional life without hardware replacement.\n\n"
@@ -254,7 +254,7 @@ elif module == "2. Circularity & EOL Planner":
             "Deploy structured decommissioning manuals for safe disassembly. Key recovery streams:\n\n"
             "- 🔴 **Copper windings** → specialist smelters (high value, high embodied carbon avoided)\n"
             "- 🟡 **CRGO steel core** → steel recycling (reduces Scope 3 of next unit's BOM)\n"
-            "- 🔵 **Insulation oil** → re-refining (Nytro RR 900X circular loop; avoids incineration CO₂)\n"
+            "- 🔵 **Insulation oil** → re-refining (circular loop; avoids incineration CO₂)\n"
             "- ⚠️ **Thermoset plastics / epoxy resins** → current waste challenge; Phase 2 design-for-disassembly target"
         )
         st.warning(
@@ -266,13 +266,18 @@ elif module == "2. Circularity & EOL Planner":
 
 elif module == "3. Portfolio CO₂ Simulator ★":
     st.title("🌍 Transformer Portfolio CO₂ Simulator")
-    st.caption("Concept proposal | Lugas Raka Adrianto → Hitachi Energy Engineering Global Sustainability Leader | June 2026")
+    st.caption("Concept proposal | Lugas Raka Adrianto | June 2026")
     st.markdown(
         """
         A **granular bottom-up CO₂ impact calculator** for the transformer portfolio — translating BOM-level
         material design choices into fleet-wide carbon outcomes across product families and annual production volumes,
-        powered by **EcoSpace™ / EcoSmart™** data feeds.
+        powered by **live EPD data feeds**.
         """
+    )
+    st.caption(
+        "ℹ️ An Environmental Product Declaration (EPD) is a standardized, independently verified report of a "
+        "product's lifecycle environmental impacts, including embodied CO₂. Here a live EPD data feed represents "
+        "the carbon-factor source that replaces the static CSV factor tables in Phase 2."
     )
 
     # ── SCOPE NOTE ───────────────────────────────────────────────────────────
@@ -286,7 +291,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         "- ⚡  **B1–B6** Use-phase energy losses (40-year operational CO₂) → covered in **Module 1: TCO & Carbon ROI**\n"
         "- ♻️  **C1–C4** End-of-life processing, dismantling & recycling credits → covered in **Module 2: Circularity & EOL Planner**\n\n"
         "📋  **Full cradle-to-grave lifecycle assessment (A1–C4 + Module D) is under development "
-        "and planned for Phase 2 integration with the EcoSpace™ full-lifecycle data feed.**"
+        "and planned for Phase 2 integration with a live full-lifecycle EPD data feed.**"
     )
     st.divider()
 
@@ -304,7 +309,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             | **1. Component CO₂** | mass_i [kg] × CI_i [kg CO₂e/kg] | kg CO₂e per BOM line |
             | **2. Unit CO₂** | Σ component CO₂ across all BOM lines | t CO₂e per transformer |
             | **3. Portfolio CO₂** | Unit CO₂ × annual volume [units/yr] | kt CO₂e / year |
-            | **4. Lever attribution** | Δ CO₂ when CI_i changes (Baseline → EconiQ); all other lines held constant | kt CO₂e / year saved per lever |
+            | **4. Lever attribution** | Δ CO₂ when CI_i changes (Baseline → Eco-Efficient); all other lines held constant | kt CO₂e / year saved per lever |
 
             Where **CI** (carbon intensity) is the emission factor for a given material and sourcing scenario,
             expressed in **kg CO₂e per kg** of material delivered to the factory gate (cradle-to-gate).
@@ -364,11 +369,11 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             st.markdown(
                 f"<div style='{TIER}'>"
                 "<b style='color:#00CC96'>📂 DATA SOURCES</b><br><br>"
-                "🔹 <b>EPDs</b> — EcoSpace™ / EcoSmart™<br>"
+                "🔹 <b>EPDs</b> — live EPD data platform<br>"
                 "🔹 <b>BOM data</b> — PLM / PDM system<br>"
                 "🔹 <b>Material CI factors</b> — Ecoinvent 3.x + supplier declarations<br>"
                 "🔹 <b>Volume forecast</b> — Product Management<br>"
-                "🔹 <b>Supplier ratings</b> — EcoVadis scores"
+                "🔹 <b>Supplier ratings</b> — third-party sustainability ratings"
                 "</div>", unsafe_allow_html=True)
         with da[1]:
             st.markdown(ARR2, unsafe_allow_html=True)
@@ -379,7 +384,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                 "🔹 mass_i × CI_i per BOM line<br>"
                 "🔹 Σ → CO₂ per transformer unit<br>"
                 "🔹 × Volume → portfolio kt CO₂e/yr<br>"
-                "🔹 Scenario Δ: Baseline vs. EconiQ<br>"
+                "🔹 Scenario Δ: Baseline vs. Eco-Efficient<br>"
                 "🔹 Lever attribution (core / fluid / Cu)"
                 "</div>", unsafe_allow_html=True)
         with da[3]:
@@ -409,19 +414,18 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         st.markdown("<br>", unsafe_allow_html=True)
         st.info(
             "📌 **Data note:** Carbon intensity values are sourced from Ecoinvent 3.x background database and "
-            "Hitachi Energy EconiQ® product declarations (Bhaba Das & Ghazi Kablouti, Hitachi Energy published LCA studies). "
+            "manufacturer product declarations and published LCA studies. "
             "BOM mass estimates are representative averages per transformer class — to be replaced with actual PLM/BOM data in production deployment."
         )
 
         st.markdown("---")
         st.markdown("### Material Carbon Intensity Reference — Key Inputs")
-        st.caption("Source: Ecoinvent 3.x + Hitachi Energy EconiQ® product declarations + supplier primary data")
+        st.caption("Source: Ecoinvent 3.x + manufacturer product declarations + supplier primary data")
 
         st.dataframe(dl.reference_table(), use_container_width=True, hide_index=True)
         st.caption(
-            "EcoVadis supply chain context: Hitachi Energy avg supplier score 55.6 vs 48.1 global average · "
-            "Platinum rating (top 1% of 89,000 companies assessed) · "
-            "Supplier Sustainability Development Program (SSDP) targets highest-CI materials first."
+            "Supply chain context: third-party supplier sustainability ratings and a supplier development "
+            "programme target the highest-carbon-intensity materials first."
         )
 
     st.divider()
@@ -433,7 +437,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         st.markdown(
             """
             ### 📥 INPUT
-            - **EPDs** from EcoSpace™ / EcoSmart™
+            - **EPDs** from a live EPD data platform
             - **Detailed BOM** per transformer class  
               *(CRGO steel, Cu windings, oil, insulation, structural steel)*
             - **Component-level CO₂ data**  
@@ -447,7 +451,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             ### 📊 OUTPUT
             - Precise **bottom-up CO₂ calculation** per unit + portfolio total
             - Immediate **portfolio-wide impact** comparison  
-              *(Baseline vs. EconiQ design scenarios)*
+              *(Baseline vs. Eco-Efficient design scenarios)*
             - **Lever attribution**: which design choice drives how much reduction
             - **Data-driven** decision support for R&D gate reviews & supplier programmes
             """
@@ -485,7 +489,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
 
     # ── STEP 2 — DESIGN SCENARIO ─────────────────────────────────────────────
     st.subheader("Step 2 — Configure Design Scenario")
-    st.caption("Scenario A is fixed as today's standard BOM. Configure Scenario B (EconiQ interventions).")
+    st.caption("Scenario A is fixed as today's standard BOM. Configure Scenario B (Eco-Efficient interventions).")
 
     col_base, col_eco = st.columns(2)
     with col_base:
@@ -496,7 +500,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             "Copper: Standard sourcing"
         )
     with col_eco:
-        st.markdown("**Scenario B — EconiQ Design Interventions**")
+        st.markdown("**Scenario B — Eco-Efficient Design Interventions**")
         core_choice   = st.selectbox("Magnetic Core Material",   list(CORE_CI.keys()),   index=1)
         fluid_choice  = st.selectbox("Insulation Fluid",          list(FLUID_CI.keys()),  index=1)
         copper_choice = st.selectbox("Copper Winding Sourcing",   list(COPPER_CI.keys()), index=1)
@@ -534,10 +538,10 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                 "Product Family":            family,
                 "Units/yr":                  vol,
                 "Baseline CO₂/unit (t)":     round(base_unit,  1),
-                "EconiQ CO₂/unit (t)":       round(eco_unit,   1),
+                "Eco-Efficient CO₂/unit (t)":       round(eco_unit,   1),
                 "Reduction/unit (t)":        round(base_unit - eco_unit, 1),
                 "Portfolio Baseline (kt/yr)": round(base_unit * vol / 1_000, 2),
-                "Portfolio EconiQ (kt/yr)":  round(eco_unit  * vol / 1_000, 2),
+                "Portfolio Eco-Efficient (kt/yr)":  round(eco_unit  * vol / 1_000, 2),
                 "Portfolio Saving (kt/yr)":  round((base_unit - eco_unit) * vol / 1_000, 2),
                 "Δ Core (kt/yr)":            round(delta_core   * vol / 1_000, 3),
                 "Δ Fluid (kt/yr)":           round(delta_fluid  * vol / 1_000, 3),
@@ -546,7 +550,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
 
         df = pd.DataFrame(rows)
         total_base   = df["Portfolio Baseline (kt/yr)"].sum()
-        total_eco    = df["Portfolio EconiQ (kt/yr)"].sum()
+        total_eco    = df["Portfolio Eco-Efficient (kt/yr)"].sum()
         total_saving = total_base - total_eco
         pct_saving   = total_saving / total_base * 100
 
@@ -579,7 +583,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         st.subheader("📊 Portfolio-Level CO₂ Output")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Baseline Portfolio", f"{total_base:.1f} kt CO₂e/yr")
-        m2.metric("EconiQ Portfolio",   f"{total_eco:.1f} kt CO₂e/yr",
+        m2.metric("Eco-Efficient Portfolio",   f"{total_eco:.1f} kt CO₂e/yr",
                   delta=f"-{total_saving:.1f} kt")
         m3.metric("Total Reduction",    f"{total_saving:.1f} kt CO₂e/yr")
         m4.metric("% Reduction",        f"{pct_saving:.1f}%",
@@ -588,7 +592,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         # ── PRODUCT-FAMILY TABLE ──────────────────────────────────────────
         st.markdown("**Bottom-up CO₂ by product family**")
         display_cols = ["Product Family", "Units/yr", "Baseline CO₂/unit (t)",
-                        "EconiQ CO₂/unit (t)", "Reduction/unit (t)", "Portfolio Saving (kt/yr)"]
+                        "Eco-Efficient CO₂/unit (t)", "Reduction/unit (t)", "Portfolio Saving (kt/yr)"]
         st.dataframe(df[display_cols].set_index("Product Family"), use_container_width=True)
 
         # ── WATERFALL: LEVER ATTRIBUTION ─────────────────────────────────
@@ -600,7 +604,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         fig_wf = go.Figure(go.Waterfall(
             orientation="v",
             measure=["absolute", "relative", "relative", "relative", "total"],
-            x=["Baseline Portfolio", "Core Material Lever", "Fluid Lever", "Copper Sourcing Lever", "EconiQ Portfolio"],
+            x=["Baseline Portfolio", "Core Material Lever", "Fluid Lever", "Copper Sourcing Lever", "Eco-Efficient Portfolio"],
             y=[total_base, -delta_core_total, -delta_fluid_total, -delta_copper_total, 0],
             text=[f"{total_base:.1f} kt",
                   f"-{delta_core_total:.2f} kt",
@@ -623,8 +627,8 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         )
         st.plotly_chart(fig_wf, use_container_width=True)
 
-        # ── STACKED BAR: BASELINE vs ECONIQ BY PRODUCT FAMILY ────────────
-        st.markdown("**Baseline vs. EconiQ CO₂ by product family**")
+        # ── STACKED BAR: BASELINE vs ECO-EFFICIENT BY PRODUCT FAMILY ────────
+        st.markdown("**Baseline vs. Eco-Efficient CO₂ by product family**")
         fig_bar = go.Figure()
         fig_bar.add_trace(go.Bar(
             name="Baseline",
@@ -633,9 +637,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             marker_color="#EF553B",
         ))
         fig_bar.add_trace(go.Bar(
-            name="EconiQ",
+            name="Eco-Efficient",
             x=df["Product Family"],
-            y=df["Portfolio EconiQ (kt/yr)"],
+            y=df["Portfolio Eco-Efficient (kt/yr)"],
             marker_color="#00CC96",
         ))
         fig_bar.update_layout(
@@ -672,7 +676,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         with ic3:
             st.warning(
                 f"**Gate-ready KPI for PLM reviews**\n\n"
-                f"EconiQ target: **{pct_saving:.1f}% lifecycle CO₂ reduction** vs. baseline.\n\n"
+                f"Eco-Efficient target: **{pct_saving:.1f}% lifecycle CO₂ reduction** vs. baseline.\n\n"
                 f"Expressed as a gate condition at PLM design review — not a sustainability aspiration."
             )
         st.caption(
@@ -737,7 +741,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                  "total_base", "total_eco", "total_saving", "pct_saving"]
             ].rename(columns={
                 "core_choice": "Core", "fluid_choice": "Fluid", "copper_choice": "Copper",
-                "total_base": "Baseline (kt/yr)", "total_eco": "EconiQ (kt/yr)",
+                "total_base": "Baseline (kt/yr)", "total_eco": "Eco-Efficient (kt/yr)",
                 "total_saving": "Saving (kt/yr)", "pct_saving": "% Reduction",
             })
             st.dataframe(kpi_view, use_container_width=True)
@@ -808,6 +812,15 @@ elif module == "4. About & Source Code":
         | **1. TCO & Carbon ROI** | B1–B6 (use phase) | 15-year total cost of ownership comparing standard vs. high-efficiency transformer designs |
         | **2. Circularity & EOL Planner** | C1–C4 + Module D | Mid-life retrofill and end-of-life decommissioning with material recovery rates |
         | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon calculator across product families and annual volumes |
+        """
+    )
+    st.divider()
+    st.markdown("### Glossary")
+    st.markdown(
+        """
+        - **EPD (Environmental Product Declaration)** — a standardized, independently verified report of a
+          product's lifecycle environmental impacts, including embodied CO₂. In this tool a live EPD data feed
+          is planned to replace the static CSV factor tables in Phase 2.
         """
     )
     st.divider()

@@ -1,11 +1,11 @@
 material_id,category,ref_name,selector_label,selectable,is_baseline,kg_co2e_per_kg,uncertainty_low,uncertainty_high,vs_baseline,supplier_programme,source,source_version,valid_from,valid_to
 core_crgo_standard,core,CRGO Steel — Standard sourcing,CRGO Steel — Standard (2.5 kg CO₂e/kg),1,1,2.5,2.0,3.0,—,Standard,Ecoinvent,3.10,2025-01-01,2026-12-31
-core_crgo_green,core,CRGO Steel — Green H₂-based sourcing,CRGO Steel — Green sourcing (0.8 kg CO₂e/kg),1,0,0.8,0.6,1.1,−68%,Green steel procurement (SSDP),Hitachi Energy EconiQ EPD,2025,2025-01-01,2026-12-31
+core_crgo_green,core,CRGO Steel — Green H₂-based sourcing,CRGO Steel — Green sourcing (0.8 kg CO₂e/kg),1,0,0.8,0.6,1.1,−68%,Green steel procurement programme,Manufacturer EPD,2025,2025-01-01,2026-12-31
 core_amorphous,core,Amorphous Metal Alloy (mfg. phase),Amorphous Metal Alloy (5.0 kg CO₂e/kg mfg),1,0,5.0,4.0,6.0,"Higher mfg, lower op. losses",Specialist suppliers,Ecoinvent,3.10,2025-01-01,2026-12-31
 struct_standard,structural,Structural Steel — Standard,,0,1,1.8,1.4,2.2,—,Standard,Ecoinvent,3.10,2025-01-01,2026-12-31
 copper_standard,copper,Copper Windings — Standard sourcing,Standard Copper (3.4 kg CO₂e/kg),1,1,3.4,2.7,4.1,—,Standard,Ecoinvent,3.10,2025-01-01,2026-12-31
-copper_lowcarbon,copper,Copper Windings — Low-carbon (fossil-free refining),Low-Carbon Copper (1.5 kg CO₂e/kg),1,0,1.5,1.2,1.9,−56%,Low-carbon Cu programme (e.g. TenneT model),Supplier primary data,2025,2025-01-01,2026-12-31
+copper_lowcarbon,copper,Copper Windings — Low-carbon (fossil-free refining),Low-Carbon Copper (1.5 kg CO₂e/kg),1,0,1.5,1.2,1.9,−56%,Low-carbon Cu programme,Supplier primary data,2025,2025-01-01,2026-12-31
 fluid_virgin_oil,fluid,Virgin Mineral Oil — Baseline,Virgin Mineral Oil — Baseline (0.85 kg CO₂e/kg),1,1,0.85,0.68,1.02,—,Standard,Ecoinvent,3.10,2025-01-01,2026-12-31
-fluid_rerefined,fluid,Re-refined Oil — Nytro RR 900X,Re-refined Oil — Nytro RR 900X (0.085 kg CO₂e/kg),1,0,0.085,0.07,0.11,−90%,Circular re-refining (EcoVadis Platinum suppliers),Hitachi Energy EconiQ EPD,2025,2025-01-01,2026-12-31
+fluid_rerefined,fluid,Re-refined Mineral Oil,Re-refined Mineral Oil (0.085 kg CO₂e/kg),1,0,0.085,0.07,0.11,−90%,Circular re-refining (certified suppliers),Manufacturer EPD,2025,2025-01-01,2026-12-31
 fluid_ester,fluid,Biodegradable Natural Ester,Biodegradable Natural Ester (0.30 kg CO₂e/kg),1,0,0.30,0.24,0.40,−65%,Specialist bio-fluid suppliers,Supplier primary data,2025,2025-01-01,2026-12-31
 insul_kraft,insulation,Kraft paper / Pressboard insulation,,0,1,0.5,0.4,0.6,—,Standard,Ecoinvent,3.10,2025-01-01,2026-12-31

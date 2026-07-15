@@ -54,7 +54,7 @@ flowchart TD
     end
 
     subgraph FUTURE["🔮 Phase 2+ (planned)"]
-        FEED["EcoSpace™ / EcoSmart™<br/>live EPD + PLM/BOM feeds"]
+        FEED["Live EPD data feed<br/>+ PLM/BOM feeds"]
     end
 
     M1 --> CALC
@@ -79,7 +79,12 @@ their results through `scenario_store.py`. Module 2 reads the same BOM masses,
 baseline factors, and per-material recovery rates to quantify end-of-life recovery
 credits; Module 1 reads sourced energy assumptions and transformer presets to model
 use-phase cost and carbon. All go through the same `data_layer.py` interface, so in
-Phase 2 the static CSVs are swapped for live EcoSpace™/EcoSmart™ feeds behind it.
+Phase 2 the static CSVs are swapped for live EPD data feeds behind it.
+
+> An **Environmental Product Declaration (EPD)** is a standardized, independently
+> verified report of a product's lifecycle environmental impacts, including embodied
+> CO₂. In this tool a live EPD data feed would replace the static CSV factor tables
+> in Phase 2.
 
 ## Data model (Phase 1)
 
@@ -157,7 +162,7 @@ erDiagram
 | `data/bom.csv` | Long-format bill-of-material masses per transformer class |
 | `data/recovery_factors.csv` | Per-component end-of-life recovery rates & routes (Module 2 Module D credits) |
 | `data/energy_params.csv` | Operating & evaluation assumptions for Module 1 (grid intensity, energy price, hours, loading, horizon, discount rate) |
-| `data/transformer_presets.csv` | Standard vs. EconiQ CAPEX and loss presets per rating (Module 1) |
+| `data/transformer_presets.csv` | Standard vs. Eco-Efficient CAPEX and loss presets per rating (Module 1) |
 | `data_layer.py` | Cached access layer exposing factors, BOM, recovery rates, energy params and the reference table to the app |
 | `scenario_store.py` | SQLite-backed persistence for named scenarios and simulation runs (`data/runs.db`) |
 
