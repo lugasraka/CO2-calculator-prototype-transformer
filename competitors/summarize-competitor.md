@@ -38,15 +38,33 @@ Pattern check: A1–A3 PCF is Full for all five (commoditized). Use-phase econom
 
 X-axis: after-the-fact reporting & compliance ↔ design-time decision support. Y-axis: generalist / cross-industry ↔ electrical-equipment specific.
 
+```mermaid
+quadrantChart
+    title "Transformer Decarbonization — Competitive Positioning"
+    x-axis "After-the-fact reporting & compliance" --> "Design-time decision support"
+    y-axis "Generalist / cross-industry" --> "Electrical-equipment specific"
+    quadrant-1 "Electrical-specific × Design-time"
+    quadrant-2 "Electrical-specific × After-the-fact"
+    quadrant-3 "Generalist × After-the-fact"
+    quadrant-4 "Generalist × Design-time"
+    carbmee: [0.20, 0.20]
+    "Sphera (GaBi)": [0.25, 0.30]
+    sustamize: [0.18, 0.35]
+    "One Click LCA": [0.50, 0.45]
+    "Contested edge (MEP/TM65, Schneider, Siemens)": [0.40, 0.72]
+    Makersite: [0.78, 0.25]
+    "Us ★": [0.90, 0.85]
+```
+
+**Quadrant reading:**
+
 | Quadrant | Player | Justification |
 |---|---|---|
-| Generalist × After-the-fact | carbmee | Sells enterprise carbon accounting + submission-ready CBAM/CSRD to C-suite/procurement; use moment is reporting, not design review |
-| Generalist × After-the-fact | Sphera (GaBi) | LCAs and EPDs are reports produced by sustainability experts; no design-gate or economics layer |
-| Generalist × After-the-fact | sustamize | Factor data infrastructure feeding PCF/Scope 3 compliance; decision support delegated to partners |
-| Generalist × After-the-fact (leaning design) | One Click LCA | Gravity is EPD disclosure ("EPDs win tenders"); design alternatives exist but serve compliance outputs |
-| Generalist × Design-time | Makersite | The only competitor whose thesis (cost+carbon jointly at design/procurement time, inside PLM) matches ours — but horizontal, no domain physics |
-| Electrical-specific × After-the-fact | (contested edge) | One Click LCA's MEP/TM65 vertical and Schneider Electric data sharing are the closest encroachment; carbmee's Siemens Energy logo similarly signals entry |
-| Electrical-specific × Design-time | **Us — alone** | Transformer loss physics (B1–B6), kVA-normalized gate KPIs, retrofill logic, €/t ranking; no competitor occupies this quadrant |
+| Generalist × After-the-fact | carbmee, Sphera (GaBi), sustamize | Compliance/PCF/Scope 3/LCA reports; no design-gate or economics layer |
+| Generalist × After-the-fact (leaning design) | One Click LCA | EPD disclosure gravity; design alternatives exist but serve compliance outputs |
+| Generalist × Design-time | Makersite | The only competitor whose thesis (cost+carbon at design/procurement time, inside PLM) matches ours — but horizontal, no domain physics |
+| Electrical-specific × After-the-fact (contested edge) | (Schneider via One Click LCA, Siemens via carbmee) | Closest encroachment via logo/MEP vertical; no dedicated transformer product yet |
+| Electrical-specific × Design-time | **Us ★ — alone** | Transformer loss physics (B1–B6), kVA-normalized gate KPIs, retrofill logic, €/t ranking; no competitor occupies this quadrant |
 
 ## 4. Key takeaways
 
