@@ -177,7 +177,7 @@ erDiagram
     BOM_LINE }o--o{ SIMULATION_RUN : "aggregated per family"
     RECOVERY_FACTOR }o--|| BOM_LINE : "recovery rate per component"
     FACTORY_ENERGY ||--|| BOM_LINE : "per-family factory energy for Module 4"
-    ```
+```
 
 - **`MATERIAL_FACTOR`**, **`BOM_LINE`** and **`RECOVERY_FACTOR`** are the sourced reference data (CSV, read-only in the app).
 - **`SCENARIO`** and **`SIMULATION_RUN`** are user-generated and persisted in `runs.db` (SQLite).
