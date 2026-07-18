@@ -14,6 +14,17 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
 | **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Outputs carry factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e). |
 
+## Competitive position
+
+A 2026 landscape scan of five adjacent vendors (Makersite, sustamize, carbmee,
+Sphera/GaBi, One Click LCA — see **[competitors/summarize-competitor.md](competitors/summarize-competitor.md)**)
+found BOM-based A1–A3 PCF to be commoditized — all five ship it. None ship use-phase
+loss economics, gate-ready kg CO₂e/kVA KPIs, per-lever €/t abatement ranking, or
+quantified factor uncertainty. That quadrant — **electrical-equipment-specific ×
+design-time decision support** — is the position this tool occupies. Strategy
+consequence: partner for carbon/EPD data rather than rebuild it, and invest in the
+decision layer competitors lack.
+
 ## Setup
 
 ```bash
@@ -54,7 +65,7 @@ flowchart TD
     end
 
     subgraph FUTURE["🔮 Phase 2+ (planned)"]
-        FEED["Live EPD data feed<br/>+ PLM/BOM feeds"]
+        FEED["Partner factor / EPD feeds<br/>+ PLM/BOM feeds"]
     end
 
     M1 --> CALC
@@ -79,12 +90,12 @@ their results through `scenario_store.py`. Module 2 reads the same BOM masses,
 baseline factors, and per-material recovery rates to quantify end-of-life recovery
 credits; Module 1 reads sourced energy assumptions and transformer presets to model
 use-phase cost and carbon. All go through the same `data_layer.py` interface, so in
-Phase 2 the static CSVs are swapped for live EPD data feeds behind it.
+Phase 2 the static CSVs are swapped for partner factor/EPD data feeds behind it.
 
 > An **Environmental Product Declaration (EPD)** is a standardized, independently
 > verified report of a product's lifecycle environmental impacts, including embodied
-> CO₂. In this tool a live EPD data feed would replace the static CSV factor tables
-> in Phase 2.
+> CO₂. In this tool a partner EPD data feed (e.g. machine-readable OpenEPD / ILCD)
+> would replace the static CSV factor tables in Phase 2.
 
 ## Data model (Phase 1)
 

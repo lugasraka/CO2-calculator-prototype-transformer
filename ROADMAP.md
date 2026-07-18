@@ -47,6 +47,10 @@ teams, and PLM gate reviewers.
    it doesn't. No hand-waving across system boundaries.
 4. **From calculator to advisor.** The long-term goal is not just to *compute* CO₂ but to
    *recommend* the lowest-cost path to a target.
+5. **Partner for data; build the decision layer.** BOM-based PCF factor data is
+   commoditized (see [competitive scan](competitors/summarize-competitor.md)). Our
+   differentiation is what we compute *on top* of the data — loss economics, gate
+   KPIs, abatement cost — not the data itself.
 
 ---
 
@@ -74,9 +78,11 @@ teams, and PLM gate reviewers.
 ### 🔜 Phase 2 — Real Data Integration  *(3–9 mo)*
 **Theme: connect to live enterprise systems.**
 
-- Ingest **actual BOM** from PLM/ERP per real product — not class averages.
-- Live EPD feed replacing static factor tables, behind the
-  same data-layer interface.
+- Ingest **actual BOM** from PLM/ERP per real product — not class averages — via
+  standard BOM import formats first, bespoke connectors later.
+- **Partner factor/EPD feeds** replacing static CSVs, behind the same data-layer
+  interface — evaluate sustamize's factor API and One Click LCA's machine-readable
+  EPD outputs (ILCD+EPD / OpenEPD) rather than building a competing factor database.
   *(An Environmental Product Declaration (EPD) is a standardized, independently verified
   report of a product's lifecycle environmental impacts, including embodied CO₂.)*
 - **Full lifecycle unification:** merge Modules 1–3 under one cradle-to-grave engine
@@ -87,18 +93,46 @@ teams, and PLM gate reviewers.
 ### 🔮 Phase 3 — Decision Intelligence  *(9–18 mo)*
 **Theme: from calculator to advisor.**
 
+- **Abatement economics as the signature output:** extend the shipped per-lever €/t
+  ranking into full **marginal abatement cost curves** (CO₂ vs. €) linking Module 1 +
+  Module 3 — uncontested white space across all five competitors scanned.
 - **Optimisation:** "hit −30% CO₂ at minimum cost" — a solver selects material levers.
-- **Marginal abatement cost curves** (CO₂ vs. €) linking Module 1 + Module 3.
-- **SBTi trajectory tracking:** portfolio actuals vs. target glide path over time.
+- **Gate-KPI artifacts:** exportable kg CO₂e/kVA pass/fail objects for PLM design reviews.
 - Sensitivity / what-if analysis and Monte Carlo over the uncertainty ranges.
+- SBTi targets enter only as *constraints* on portfolio scenarios — corporate-target
+  tooling is deliberately left to corporate-carbon platforms (carbmee, Makersite, Sphera).
 
 ### 🌐 Phase 4 — Platform & Scale  *(18 mo+)*
 **Theme: multi-user, governed, integrated.**
 
 - Multi-tenant, role-based access (R&D, procurement, sustainability).
-- **API** so PLM gates call the engine programmatically — CO₂ as a hard design condition.
-- Audit trail and versioned assumptions for external assurance / compliance.
-- Regional grid factors, multi-currency, regulatory reporting (CBAM, CSRD).
+- **Narrow, open gate API** so PLM gates call the engine programmatically — CO₂ as a
+  hard design condition; exports aligned with OpenEPD / ILCD machine-readable formats.
+- Audit trail and versioned assumptions, plus **third-party methodology validation**
+  (the GUTcert / DEKRA pattern competitors use) instead of self-asserted assurance.
+- Regional grid factors, multi-currency.
+- CBAM/CSRD: emit compliant *inputs* to dedicated reporting tools (already shipped
+  audit-grade by Makersite, sustamize, carbmee) rather than building a competing engine.
+
+---
+
+## Competitive context (July 2026)
+
+Full scan: **[competitors/summarize-competitor.md](competitors/summarize-competitor.md)**
+(five vendors: Makersite, sustamize, carbmee, Sphera/GaBi, One Click LCA).
+
+- **Commoditized:** BOM-based A1–A3 PCF — shipped by all five. Not our moat.
+- **Uncontested (ours):** use-phase loss economics (B1–B6 → TCO/payback), gate-ready
+  kg CO₂e/kVA, per-lever €/t abatement ranking, quantified factor uncertainty,
+  transformer EOL decision logic — plus open-source, engineer-first adoption that
+  quote-only enterprise vendors structurally can't match.
+- **Primary threat:** Makersite (High, directional) — ships the cost+carbon-in-PLM
+  thesis horizontally and now owns PCF-exchange rails (SiGREEN → Mattermaps).
+  Watch trigger: a heavy-electrical-equipment vertical template.
+- **Already in the vertical:** Schneider Electric (Makersite, One Click LCA) and
+  Siemens Energy (carbmee) — beachheads exist, but no transformer-specific product yet.
+- **Strategy:** partner for data (sustamize, One Click LCA), interoperate with the
+  PCF-exchange networks, and out-run everyone on the decision layer.
 
 ---
 
@@ -109,7 +143,7 @@ The core trajectory: **from constants-in-code → a versioned, sourced, relation
 | Phase | Data-model evolution |
 |-------|----------------------|
 | **1 (done)** | Coefficients, BOM, EOL recovery rates & energy/evaluation assumptions extracted to sourced CSVs with uncertainty + provenance; scenarios/runs persisted in `scenario` + `simulation_run` tables (SQLite). |
-| **2** | `product` + `bom_line` tables fed by real PLM/ERP; factors gain supplier + lifecycle-stage dimensions; static CSVs swapped for live EPD feed. |
+| **2** | `product` + `bom_line` tables fed by real PLM/ERP; factors gain supplier + lifecycle-stage dimensions; static CSVs swapped for partner factor/EPD feeds. |
 | **3** | Time-series `volume_forecast` (year × region); optimisation & MAC-curve views read cost + carbon jointly; scenario results become comparable over time. |
 | **4** | Owner / tenant on every record; temporal `valid_from` / `valid_to` on all assumptions; full audit trail for assurance; regional & regulatory dimensions. |
 

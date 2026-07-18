@@ -1234,8 +1234,9 @@ elif module == "4. About & Source Code":
     st.markdown(
         """
         This app is an open-source concept prototype demonstrating a bottom-up CO₂ management
-        workflow for transformer portfolios, covering TCO analysis, circularity planning, and
-        embodied carbon simulation across lifecycle stages A1–A3.
+        workflow for transformer portfolios — covering use-phase TCO & carbon, circularity
+        planning, and embodied carbon simulation across lifecycle stages A1–A3, B1–B6 and
+        C1–C4 + Module D.
         """
     )
     st.divider()
@@ -1265,23 +1266,120 @@ elif module == "4. About & Source Code":
         )
 
     st.divider()
+    st.markdown("### Product Vision")
+    st.markdown(
+        """
+        > Make embodied and lifecycle carbon a *quantifiable, comparable, and auditable* input
+        > to every transformer design, sourcing, and R&D decision — turning sustainability
+        > from an after-the-fact report into a live engineering condition.
+
+        Today carbon is measured **after** the product is designed, not **while** it is being
+        designed. This tool puts a fast, credible CO₂ number in front of the engineer at the
+        moment the decision is made.
+        """
+    )
+    st.divider()
+
     st.markdown("### Modules")
     st.markdown(
         """
         | Module | Lifecycle Scope | Description |
-        |--------|----------------|-------------|
-        | **1. TCO & Carbon ROI** | B1–B6 (use phase) | 15-year total cost of ownership comparing standard vs. high-efficiency transformer designs |
-        | **2. Circularity & EOL Planner** | C1–C4 + Module D | Mid-life retrofill and end-of-life decommissioning with material recovery rates |
-        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon calculator across product families and annual volumes |
+        |--------|-----------------|-------------|
+        | **1. TCO & Carbon ROI** | B1–B6 (use phase) | Lifetime cost & carbon of standard vs. high-efficiency designs — NPV TCO, lifetime CO₂ savings, and payback |
+        | **2. Circularity & EOL Planner** | C1–C4 + Module D | Retrofill vs. decommissioning trade-offs and Module D recovery credits from sourced recovery rates |
+        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon from BOM → portfolio, with factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e) |
         """
     )
     st.divider()
+
+    st.markdown("### Roadmap at a Glance")
+    st.markdown(
+        """
+        | Phase | Theme | Status | Key items |
+        |-------|-------|--------|-----------|
+        | **1 — Foundation & Trust** | Make the numbers real and defensible | ✅ Done | Sourced CSV data layer, provenance + uncertainty, scenario save/compare/export, gate KPIs, €/t abatement ranking |
+        | **2 — Real Data Integration** | Connect to live enterprise systems | 🔜 3–9 mo | Partner factor/EPD feeds (not a self-built database), real PLM/ERP BOM ingestion, full cradle-to-grave unification |
+        | **3 — Decision Intelligence** | From calculator to advisor | 🔮 9–18 mo | MAC curves as signature output, cost-optimal CO₂ targeting, gate-KPI artifacts, Monte Carlo sensitivity |
+        | **4 — Platform & Scale** | Multi-user, governed, integrated | 🌐 18 mo+ | Open PLM-gate API (OpenEPD/ILCD-aligned), multi-tenant, third-party methodology validation |
+        """
+    )
+    with st.expander("Full roadmap detail (Phase 1–4)"):
+        st.markdown(
+            """
+            **✅ Phase 1 — Foundation & Trust (current):** sourced CSV data layer (`data/` via
+            `data_layer.py`) with provenance, uncertainty ranges and validity dates; scenario
+            save/compare/export (SQLite); uncertainty bounds, kg CO₂e/kVA gate KPI, per-lever
+            €/t abatement cost, and a data-freshness banner in outputs.
+
+            **🔜 Phase 2 — Real Data Integration (3–9 mo):** partner factor/EPD feeds behind the
+            same data-layer interface (evaluate sustamize's factor API, One Click LCA's
+            ILCD+EPD / OpenEPD outputs); actual BOM from PLM/ERP via standard import formats;
+            full cradle-to-grave unification (A1–C4 + Module D); supplier-specific factors;
+            A4–A5 coverage.
+
+            **🔮 Phase 3 — Decision Intelligence (9–18 mo):** per-lever €/t ranking extended to
+            full marginal abatement cost curves (linking Modules 1 + 3); cost-optimal lever
+            selection ("hit −30% CO₂ at minimum cost"); exportable gate-KPI artifacts;
+            Monte Carlo over uncertainty ranges; SBTi targets as constraints only.
+
+            **🌐 Phase 4 — Platform & Scale (18 mo+):** multi-tenant role-based access; narrow
+            open gate API with OpenEPD/ILCD-aligned exports; third-party methodology validation
+            (GUTcert / DEKRA pattern); regional grid factors, multi-currency; CBAM/CSRD inputs
+            to dedicated reporting tools rather than a competing engine.
+
+            See `ROADMAP.md` for the full vision and data-model evolution.
+            """
+        )
+    st.divider()
+
+    st.markdown("### Competitive Position (July 2026)")
+    st.markdown(
+        """
+        A landscape scan of five adjacent vendors (Makersite, sustamize, carbmee,
+        Sphera/GaBi, One Click LCA):
+
+        - **Commoditized:** BOM-based A1–A3 PCF — all five ship it. Not our moat.
+        - **Uncontested (ours):** use-phase loss economics (B1–B6 → TCO/payback), gate-ready
+          kg CO₂e/kVA, per-lever €/t abatement ranking, quantified factor uncertainty — plus
+          open-source, engineer-first adoption that quote-only enterprise vendors can't match.
+        - **Strategy:** partner for data (sustamize, One Click LCA), interoperate with
+          PCF-exchange networks, out-run everyone on the decision layer.
+        """
+    )
+    with st.expander("Full competitive landscape scan"):
+        st.markdown(
+            """
+            Detailed per-competitor analyses and the synthesis live in the repo under
+            `competitors/`:
+
+            - `summarize-competitor.md` — capability matrix, positioning map, threat ranking & watch triggers
+            - `competitor-makersite.md` — **primary threat (High, directional):** ships the
+              cost+carbon-in-PLM thesis horizontally; owns PCF-exchange rails (SiGREEN → Mattermaps)
+            - `competitor-sustamize.md` · `competitor-carbmee.md` ·
+              `competitor-sphera-gabi.md` · `competitor-one-click-lca.md`
+
+            Beachheads in our vertical already exist — Schneider Electric (Makersite,
+            One Click LCA) and Siemens Energy (carbmee) — but no transformer-specific
+            product yet.
+            """
+        )
+    st.divider()
+
     st.markdown("### Glossary")
     st.markdown(
         """
-        - **EPD (Environmental Product Declaration)** — a standardized, independently verified report of a
-          product's lifecycle environmental impacts, including embodied CO₂. In this tool a live EPD data feed
-          is planned to replace the static CSV factor tables in Phase 2.
+        - **EPD (Environmental Product Declaration)** — standardized, independently verified
+          report of a product's lifecycle environmental impacts, including embodied CO₂.
+        - **CBAM (Carbon Border Adjustment Mechanism)** — EU carbon levy on imported goods,
+          driving demand for verified product carbon footprints.
+        - **CSRD (Corporate Sustainability Reporting Directive)** — EU directive mandating
+          audited sustainability disclosure, including Scope 3 emissions.
+        - **SBTi (Science Based Targets initiative)** — framework for corporate emission-reduction
+          targets aligned with climate science.
+        - **Module D** — EN 15804 lifecycle stage crediting benefits beyond the system boundary
+          (e.g. recycling credits from recovered copper and steel).
+        - **kg CO₂e/kVA** — embodied carbon normalized by transformer rating; the gate-ready KPI
+          enabling cross-class comparison at PLM design reviews.
         """
     )
     st.divider()
