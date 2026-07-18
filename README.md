@@ -12,7 +12,7 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 |--------|-------------|
 | **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
-| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Outputs carry factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e). |
+| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Engineers can compare a saved baseline with up to three alternatives in a design-gate view, with a transparent carbon-first recommendation, cost trade-offs, uncertainty, and CSV export. |
 | **4. GHG Scope 1/2/3 Report** | Aggregates Modules 1–3 into a corporate GHG-Protocol reporting view (Scope 1 factory fuel, Scope 2 factory electricity, Scope 3 Cat 1 / 11 / 12). Includes editable per-family factory-energy inputs (`data/factory_energy.csv`) and CSV export. Scope 1 & 2 use Phase 1 indicative estimates until Phase 2 metered factory data. |
 
 ## Competitive position
@@ -76,7 +76,7 @@ flowchart TD
     M3 --> CALC
     M4 -->|aggregate M1-M3 outputs| CALC
     CALC --> DL
-    M3 -->|save / compare / export| SS
+    M3 -->|save / design-gate compare / export| SS
     M4 -->|read saved session state| SS
     DL --> MF
     DL --> BOM
@@ -194,10 +194,14 @@ erDiagram
 | `data_layer.py` | Cached access layer exposing factors, BOM, recovery rates, energy params and the reference table to the app |
 | `scenario_store.py` | SQLite-backed persistence for named scenarios and simulation runs (`data/runs.db`) |
 
-Module 3 lets you **save named scenarios**, **export** per-family results to CSV,
-and **compare** saved runs side by side. Saved runs persist locally in
-`data/runs.db` (gitignored, regenerated at runtime). Module 2 exports its
-portfolio and per-component Module D credit tables to CSV.
+Module 3 lets engineers **save named scenarios** and use a **Design-Gate Comparison**
+workspace to select one saved baseline and up to three saved alternatives. It compares
+portfolio embodied carbon, relative carbon reduction, annual material-cost delta,
+abatement cost, and factor uncertainty. The recommendation is deliberately
+transparent: it selects the lowest-carbon alternative, using material cost only to
+break a carbon tie. The comparison and per-family results can be exported to CSV.
+Saved runs persist locally in `data/runs.db` (gitignored, regenerated at runtime).
+Module 2 exports its portfolio and per-component Module D credit tables to CSV.
 
 ## Scope
 

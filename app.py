@@ -35,6 +35,24 @@ def warn_factor_freshness() -> None:
         )
 
 
+def saved_run_decision_metrics(run: pd.Series) -> dict:
+    """Return the saved-run measures needed for a design-gate comparison."""
+    results = store.get_run_results(int(run["run_id"]))
+
+    def total_for(prefix: str) -> float:
+        column = next((name for name in results.columns if name.startswith(prefix)), None)
+        if column is None:
+            return 0.0
+        return float(pd.to_numeric(results[column], errors="coerce").fillna(0).sum())
+
+    return {
+        "portfolio_eco": float(run["total_eco"]),
+        "green_premium_k_eur": total_for("Green premium"),
+        "eco_low": total_for("Eco low"),
+        "eco_high": total_for("Eco high"),
+    }
+
+
 st.sidebar.title("Decarbonization Workflow")
 module = st.sidebar.radio(
     "Select Module:",
@@ -1172,6 +1190,125 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         )
     else:
         saved = saved.copy()
+        st.markdown("### Design-Gate Comparison")
+        saved["gate_label"] = saved.apply(
+            lambda row: f"#{row.run_id} - {row['name']} ({row.created_at[:10]})",
+            axis=1,
+        )
+        gate_label_to_id = dict(zip(saved["gate_label"], saved["run_id"]))
+        baseline_label = st.selectbox(
+            "Baseline design",
+            options=list(gate_label_to_id.keys()),
+            key="design_gate_baseline",
+        )
+        alternative_options = [
+            label for label in gate_label_to_id if label != baseline_label
+        ]
+        alternative_labels = st.multiselect(
+            "Alternatives for this gate",
+            options=alternative_options,
+            max_selections=3,
+            key="design_gate_alternatives",
+        )
+
+        if not alternative_labels:
+            st.caption("Select one to three alternatives to make a design-gate comparison.")
+        else:
+            baseline = saved[
+                saved["run_id"] == gate_label_to_id[baseline_label]
+            ].iloc[0]
+            baseline_metrics = saved_run_decision_metrics(baseline)
+            comparison_rows = [
+                {
+                    "Scenario": baseline["name"],
+                    "Role": "Baseline",
+                    "Portfolio carbon (kt/yr)": baseline_metrics["portfolio_eco"],
+                    "Carbon change (kt/yr)": 0.0,
+                    "Carbon reduction": 0.0,
+                    "Material cost delta (kEUR/yr)": 0.0,
+                    "Abatement cost (EUR/tCO2e)": None,
+                    "Uncertainty (kt/yr)": (
+                        f"{baseline_metrics['eco_low']:.2f}-{baseline_metrics['eco_high']:.2f}"
+                    ),
+                    "run_id": int(baseline["run_id"]),
+                }
+            ]
+
+            for label in alternative_labels:
+                candidate = saved[
+                    saved["run_id"] == gate_label_to_id[label]
+                ].iloc[0]
+                candidate_metrics = saved_run_decision_metrics(candidate)
+                carbon_reduction = (
+                    baseline_metrics["portfolio_eco"]
+                    - candidate_metrics["portfolio_eco"]
+                )
+                cost_delta = (
+                    candidate_metrics["green_premium_k_eur"]
+                    - baseline_metrics["green_premium_k_eur"]
+                )
+                comparison_rows.append(
+                    {
+                        "Scenario": candidate["name"],
+                        "Role": "Alternative",
+                        "Portfolio carbon (kt/yr)": candidate_metrics["portfolio_eco"],
+                        "Carbon change (kt/yr)": -carbon_reduction,
+                        "Carbon reduction": carbon_reduction / baseline_metrics["portfolio_eco"] * 100,
+                        "Material cost delta (kEUR/yr)": cost_delta,
+                        "Abatement cost (EUR/tCO2e)": (
+                            cost_delta / carbon_reduction
+                            if carbon_reduction > 0
+                            else None
+                        ),
+                        "Uncertainty (kt/yr)": (
+                            f"{candidate_metrics['eco_low']:.2f}-{candidate_metrics['eco_high']:.2f}"
+                        ),
+                        "run_id": int(candidate["run_id"]),
+                    }
+                )
+
+            comparison = pd.DataFrame(comparison_rows)
+            recommendation = comparison[
+                (comparison["Role"] == "Alternative")
+                & (comparison["Carbon change (kt/yr)"] < 0)
+            ].sort_values(
+                ["Portfolio carbon (kt/yr)", "Material cost delta (kEUR/yr)"],
+                ascending=[True, True],
+            )
+
+            if recommendation.empty:
+                st.warning("None of the selected alternatives lowers portfolio embodied carbon.")
+            else:
+                winner = recommendation.iloc[0]
+                st.success(
+                    f"Recommended: {winner['Scenario']} - lowest portfolio embodied carbon "
+                    f"at {winner['Portfolio carbon (kt/yr)']:.2f} ktCO2e/yr."
+                )
+                st.caption(
+                    "Carbon-first rule: alternatives are ranked by lower portfolio carbon; "
+                    "annual material-cost delta breaks a carbon tie."
+                )
+
+            display_comparison = comparison.drop(columns="run_id").copy()
+            for column in [
+                "Portfolio carbon (kt/yr)",
+                "Carbon change (kt/yr)",
+                "Carbon reduction",
+                "Material cost delta (kEUR/yr)",
+                "Abatement cost (EUR/tCO2e)",
+            ]:
+                display_comparison[column] = display_comparison[column].map(
+                    lambda value: round(value, 2) if pd.notna(value) else "n/a"
+                )
+            st.dataframe(display_comparison, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Export design-gate comparison (CSV)",
+                data=display_comparison.to_csv(index=False).encode("utf-8"),
+                file_name="design_gate_comparison.csv",
+                mime="text/csv",
+                use_container_width=False,
+            )
+
         saved["label"] = saved.apply(
             lambda r: f"#{r.run_id} · {r['name']} ({r.created_at[:10]})", axis=1
         )

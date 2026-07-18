@@ -29,7 +29,7 @@ Today it is a Streamlit prototype with four modules mapped to lifecycle stages a
 |--------|-----------------|----------------|
 | **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via lifetime TCO, use-phase carbon savings, and payback |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Quantify retrofill vs. decommission trade-offs and the Module D recovery credit from sourced recovery rates |
-| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, scenario comparison |
+| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, including a design-gate comparison of one baseline and up to three alternatives |
 | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
 
 **Target users:** R&D / design engineers, sustainability leads, procurement & supply-chain
@@ -65,6 +65,9 @@ teams, and PLM gate reviewers.
 - ✅ Provenance per factor — source, version, validity dates.
 - ✅ Uncertainty ranges (low / expected / high) on carbon factors.
 - ✅ Save, name, and compare scenarios; persist runs in SQLite (`scenario_store.py`).
+- ✅ Design-Gate Comparison for engineers: compare one saved baseline with up to three
+  alternatives; show carbon, cost, abatement cost, and uncertainty; export the
+  comparison; and make a transparent carbon-first recommendation.
 - ✅ Export per-family results (CSV) for gate reviews.
 - ✅ Quantify Module 2 end-of-life outcomes — avoided-replacement carbon (retrofill) and
   the Module D recovery credit — from a sourced `recovery_factors.csv`, with CSV export.
@@ -101,6 +104,9 @@ teams, and PLM gate reviewers.
 ### 🔮 Phase 3 — Decision Intelligence  *(9–18 mo)*
 **Theme: from calculator to advisor.**
 
+- **Constraint-aware design selection:** extend the shipped carbon-first comparison
+  with cost ceilings, minimum carbon-reduction targets, loss-performance limits, and
+  approved-material constraints so recommendations remain feasible in an engineering gate.
 - **Abatement economics as the signature output:** extend the shipped per-lever €/t
   ranking into full **marginal abatement cost curves** (CO₂ vs. €) linking Module 1 +
   Module 3 — uncontested white space across all five competitors scanned.

@@ -6,3 +6,7 @@ __pycache__/
 
 # Local scenario/run persistence (regenerated at runtime)
 data/runs.db
+
+# Local Streamlit runtime logs
+.streamlit.log
+.streamlit.err
