@@ -1,0 +1,4 @@
+family,natural_gas_kwh_per_unit,electricity_kwh_per_unit,source
+"Distribution  (avg 1,000 kVA)",1200,800,Representative factory energy per unit (Phase 1 estimate — annealing/drying ovens + assembly electricity)
+"Medium Power  (avg 25 MVA)",12000,8000,Representative factory energy per unit (Phase 1 estimate — annealing/drying ovens + assembly electricity)
+"Large Power   (avg 250 MVA)",90000,60000,Representative factory energy per unit (Phase 1 estimate — annealing/drying ovens + assembly electricity)

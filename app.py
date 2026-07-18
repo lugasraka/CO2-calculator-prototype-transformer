@@ -42,7 +42,8 @@ module = st.sidebar.radio(
         "1. TCO & Carbon ROI",
         "2. Circularity & EOL Planner",
         "3. Portfolio CO₂ Simulator ★",
-        "4. About & Source Code",
+        "4. GHG Scope 1/2/3 Report",
+        "5. About & Source Code",
     ],
 )
 
@@ -381,6 +382,11 @@ elif module == "2. Circularity & EOL Planner":
             delta="avoided virgin-material CO₂e",
         )
         st.dataframe(portfolio_df, use_container_width=True, hide_index=True)
+        st.session_state["mod2_eol"] = {
+            "total_portfolio_kt": float(total_portfolio_kt),
+            "total_units": int(total_units),
+            "volumes": {fam: float(volumes[fam]) for fam in BOM.keys()},
+        }
         st.download_button(
             "⬇ Export portfolio credit (CSV)",
             portfolio_df.to_csv(index=False).encode("utf-8"),
@@ -1229,7 +1235,433 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                     store.delete_run(label_to_id[to_delete])
                     st.rerun()
 
-elif module == "4. About & Source Code":
+elif module == "4. GHG Scope 1/2/3 Report":
+    st.header("📋 GHG Scope 1 / 2 / 3 Emissions Report")
+    st.markdown(
+        """
+        A **reporting re-categorization** of the manufacturer's annual transformer-related emissions
+        according to the **GHG Protocol Corporate Standard** — the reporting framework behind **CSRD**
+        and **SBTi** disclosure. This module rebuckets outputs from Modules 1–3 into Scope 1, 2 and 3
+        categories; it does **not** introduce a new life-cycle model.
+        """
+    )
+    st.caption(
+        "Reporting entity: transformer manufacturer for a year of production. "
+        "Reporting basis: annual year-of-sale (units sold × annual emissions), per SBTi/CSRD convention."
+    )
+    warn_factor_freshness()
+    st.divider()
+
+    st.error(
+        "⚠️  **Scope aggregation — honest data-gap callouts**\n\n"
+        "- **Scope 1 & 2** use **indicative factory-energy estimates** (`data/factory_energy.csv`) "
+        "per product family. Metered MES/EMS factory data is a **Phase 2** deliverable.\n"
+        "- **Scope 3.1 (Purchased goods, A1–A3)** pulls the latest run from **Module 3**. "
+        "Run Module 3 first for accurate figures.\n"
+        "- **Scope 3.11 (Use of sold products, B1–B6)** re-derives Module 1 loss intensity from "
+        "sourced defaults, scaled across families by kVA — visit Module 1 to override.\n"
+        "- **Scope 3.12 (EOL of sold products)** reflects the **Module D recovery credit** only "
+        "(beyond-boundary); gross C1–C4 emissions await Phase 2 partner process data.\n"
+        "- **Out of scope today:** fugitive SF₆ emissions (Scope 1), A4–A5 transport (Scope 3 Cat 4), "
+        "business travel, employee commuting, investments."
+    )
+    st.divider()
+
+    params = dl.energy_params()
+    presets = dl.load_transformer_presets()
+    std_p = presets[presets["design"] == "Standard"].iloc[0]
+    eco_p = presets[presets["design"] == "Eco-Efficient"].iloc[0]
+
+    factory_energy = dl.factory_energy_by_family()
+    KVA = dl.kva_by_family()
+    family_list = list(factory_energy.keys())
+
+    sim = st.session_state.get("sim")
+    mod2_eol = st.session_state.get("mod2_eol")
+    if sim is None:
+        st.info(
+            "ℹ️ No Module 3 simulation found in this session. Using default volumes; "
+            "Scope 3.1 rows will show '—' until you run Module 3."
+        )
+
+    st.subheader("Step 1 — Production Volumes (annual)")
+    st.caption(
+        "Reused from the latest Module 3 run if available; editable here otherwise."
+    )
+    default_vols = (
+        sim["volumes"]
+        if sim is not None
+        else {
+            "Distribution  (avg 1,000 kVA)": 500,
+            "Medium Power  (avg 25 MVA)": 120,
+            "Large Power   (avg 250 MVA)": 25,
+        }
+    )
+    vol_inputs = {}
+    vcols = st.columns(len(family_list))
+    for col, fam in zip(vcols, family_list):
+        default_v = default_vols.get(fam, 100)
+        vol_inputs[fam] = col.number_input(
+            f"{fam.strip()} (units/yr)",
+            min_value=0,
+            value=int(default_v),
+            step=10,
+            key=f"m4_vol_{fam}",
+        )
+
+    st.subheader("Step 2 — Scope 1 & 2 Factory Energy per Unit")
+    st.caption(
+        "Defaults from `data/factory_energy.csv`; grid factor from `data/energy_params.csv`."
+    )
+    fe_rows = []
+    fe_cols = st.columns(len(family_list))
+    editable_fe = {}
+    for col, fam in zip(fe_cols, family_list):
+        with col:
+            st.markdown(f"**{fam.strip()}**")
+            gas_kwh = st.number_input(
+                "Natural gas (kWh/unit)",
+                min_value=0.0,
+                value=float(factory_energy[fam]["gas_kwh_per_unit"]),
+                step=100.0,
+                format="%.0f",
+                key=f"m4_gas_{fam}",
+            )
+            elec_kwh = st.number_input(
+                "Electricity (kWh/unit)",
+                min_value=0.0,
+                value=float(factory_energy[fam]["electricity_kwh_per_unit"]),
+                step=100.0,
+                format="%.0f",
+                key=f"m4_elec_{fam}",
+            )
+        editable_fe[fam] = {
+            "gas_kwh_per_unit": gas_kwh,
+            "electricity_kwh_per_unit": elec_kwh,
+        }
+
+    ef_cols = st.columns(2)
+    gas_factor = ef_cols[0].number_input(
+        "Natural gas emission factor (kg CO₂e/kWh)",
+        min_value=0.0,
+        value=float(params["natural_gas_emission_factor"]),
+        step=0.01,
+        format="%.3f",
+    )
+    elec_factor = ef_cols[1].number_input(
+        "Factory electricity emission factor (kg CO₂e/kWh)",
+        min_value=0.0,
+        value=float(params["factory_electricity_factor"]),
+        step=0.01,
+        format="%.3f",
+    )
+
+    st.subheader("Step 3 — Use-phase Loss Intensity (Scope 3.11)")
+    st.caption(
+        "Re-derived from Module 1 sourced presets; select which design represents the sold fleet."
+    )
+    design_choice = st.radio(
+        "Sold-fleet loss design:",
+        ["Standard", "Eco-Efficient"],
+        index=0,
+        horizontal=True,
+    )
+    chosen_preset = std_p if design_choice == "Standard" else eco_p
+    loading_default = params["loading_factor"]
+    hours_default = params["operating_hours"]
+    grid_ci_default = params["grid_carbon_intensity"]
+    l1, l2, l3 = st.columns(3)
+    loading_m4 = (
+        l1.slider("Average loading (%)", 0, 100, int(loading_default * 100)) / 100
+    )
+    hours_m4 = l2.number_input(
+        "Operating hours (h/yr)", value=float(hours_default), step=100.0, format="%.0f"
+    )
+    grid_ci_m4 = l3.number_input(
+        "Grid carbon intensity (kg CO₂e/kWh)",
+        value=float(grid_ci_default),
+        step=0.01,
+        format="%.3f",
+    )
+
+    st.subheader("Step 4 — Scope 3.1 Scenario Selection")
+    s31_choice = "Baseline"
+    if sim is not None:
+        s31_choice = st.radio(
+            "Module 3 portfolio scenario to report under Scope 3.1:",
+            ["Baseline", "Eco-Efficient"],
+            index=0,
+            horizontal=True,
+        )
+    else:
+        st.caption(
+            "Run Module 3 to enable Baseline vs. Eco-Efficient selection for Scope 3.1."
+        )
+
+    st.divider()
+
+    scope1_t = sum(
+        vol_inputs[fam] * editable_fe[fam]["gas_kwh_per_unit"] * gas_factor / 1_000
+        for fam in family_list
+    )
+    scope2_t = sum(
+        vol_inputs[fam]
+        * editable_fe[fam]["electricity_kwh_per_unit"]
+        * elec_factor
+        / 1_000
+        for fam in family_list
+    )
+
+    unit_loss_kwh = (
+        (float(chosen_preset.no_load_w) + float(chosen_preset.load_w) * loading_m4**2)
+        * hours_m4
+        / 1_000
+    )
+    unit_loss_co2_t = unit_loss_kwh * grid_ci_m4 / 1_000
+    ref_kva = float(std_p.rating_kva)
+    scope3_11_t = 0.0
+    for fam in family_list:
+        kva_fam = KVA.get(fam, ref_kva)
+        scale = kva_fam / ref_kva if ref_kva > 0 else 1.0
+        scope3_11_t += vol_inputs[fam] * unit_loss_co2_t * scale
+
+    scope3_1_available = sim is not None
+    scope3_1_t = 0.0
+    scope3_1_kt_row = None
+    if scope3_1_available:
+        df_sim = sim["df"]
+        if s31_choice == "Baseline":
+            scope3_1_kt_row = df_sim["Portfolio Baseline (kt/yr)"].sum()
+        else:
+            scope3_1_kt_row = df_sim["Portfolio Eco-Efficient (kt/yr)"].sum()
+        scope3_1_t = float(scope3_1_kt_row) * 1_000
+
+    scope3_12_available = mod2_eol is not None
+    scope3_12_t = 0.0
+    if scope3_12_available:
+        scope3_12_t = (
+            float(mod2_eol["total_portfolio_kt"]) * 1_000
+        )  # credit (negative sign applied in display)
+
+    total_pos_t = scope1_t + scope2_t + scope3_1_t + scope3_11_t
+    if total_pos_t > 0:
+        pct1 = scope1_t / total_pos_t * 100
+        pct2 = scope2_t / total_pos_t * 100
+        pct31 = scope3_1_t / total_pos_t * 100 if scope3_1_available else 0.0
+        pct311 = scope3_11_t / total_pos_t * 100
+    else:
+        pct1 = pct2 = pct31 = pct311 = 0.0
+
+    s1, s2, s3 = st.columns(3)
+    s1.metric(
+        "Scope 1 — Direct factory fuel",
+        f"{scope1_t:,.0f} t CO₂e/yr",
+        delta=f"{pct1:.1f}%",
+    )
+    s2.metric(
+        "Scope 2 — Purchased electricity",
+        f"{scope2_t:,.0f} t CO₂e/yr",
+        delta=f"{pct2:.1f}%",
+    )
+    s3.metric(
+        "Scope 3 — Value chain (gross)",
+        f"{(scope3_1_t + scope3_11_t):,.0f} t CO₂e/yr"
+        + (f" − {abs(scope3_12_t):,.0f} t D-credit" if scope3_12_available else ""),
+        delta=f"{pct31 + pct311:.1f}%",
+    )
+
+    st.divider()
+    st.subheader("📊 Detailed Scope Breakdown")
+
+    report_rows = [
+        {
+            "Scope": "1 — Direct",
+            "GHG Category": "Stationary combustion (annealing/drying ovens)",
+            "Lifecycle stage": "A3 (in-factory)",
+            "Source module": "NEW — `factory_energy.csv`",
+            "Value (t CO₂e/yr)": round(scope1_t, 1),
+            "Share": f"{pct1:.1f}%" if total_pos_t > 0 else "—",
+            "Data status": "Phase 1 indicative estimate",
+        },
+        {
+            "Scope": "2 — Purchased energy",
+            "GHG Category": "Purchased electricity (location-based)",
+            "Lifecycle stage": "A3 (in-factory)",
+            "Source module": "NEW — `factory_energy.csv`",
+            "Value (t CO₂e/yr)": round(scope2_t, 1),
+            "Share": f"{pct2:.1f}%" if total_pos_t > 0 else "—",
+            "Data status": "Phase 1 indicative estimate",
+        },
+        {
+            "Scope": "3.1 — Purchased goods",
+            "GHG Category": "Embodied carbon of BOM (cradle-to-gate)",
+            "Lifecycle stage": "A1–A3",
+            "Source module": "Module 3 (Portfolio CO₂ Simulator)",
+            "Value (t CO₂e/yr)": round(scope3_1_t, 1) if scope3_1_available else "—",
+            "Share": f"{pct31:.1f}%" if scope3_1_available and total_pos_t > 0 else "—",
+            "Data status": "Available" if scope3_1_available else "Run Module 3 first",
+        },
+        {
+            "Scope": "3.11 — Use of sold products",
+            "GHG Category": "Operational energy losses (no-load + load)",
+            "Lifecycle stage": "B1–B6",
+            "Source module": "Module 1 (TCO & Carbon ROI) — re-derived here from sourced defaults",
+            "Value (t CO₂e/yr)": round(scope3_11_t, 1),
+            "Share": f"{pct311:.1f}%" if total_pos_t > 0 else "—",
+            "Data status": "Approximation: 1600 kVA loss intensity scaled by kVA/class",
+        },
+        {
+            "Scope": "3.12 — EOL of sold products",
+            "GHG Category": "Module D beyond-boundary recovery credit (net negative)",
+            "Lifecycle stage": "C1–C4 + D (Module D credit only)",
+            "Source module": "Module 2 (Circularity & EOL Planner) — decommissioning branch",
+            "Value (t CO₂e/yr)": -round(abs(scope3_12_t), 1)
+            if scope3_12_available
+            else "—",
+            "Share": "n/a (beyond-boundary credit)",
+            "Data status": "Available"
+            if scope3_12_available
+            else "Run Module 2 (decom.) first — gross C1–C4 awaits Phase 2",
+        },
+    ]
+    report_df = pd.DataFrame(report_rows)
+    st.dataframe(report_df, use_container_width=True, hide_index=True)
+
+    net_total = (
+        scope1_t
+        + scope2_t
+        + scope3_1_t
+        + scope3_11_t
+        - (abs(scope3_12_t) if scope3_12_available else 0.0)
+    )
+    st.caption(
+        f"**Net total (gross scopes + Module D credit):** {net_total:,.0f} t CO₂e/yr. "
+        "Module D credit is beyond-boundary per EN 15804 — shown for transparency, not netted by default in CSRD disclosure."
+    )
+
+    st.markdown("**Scope distribution (gross)**")
+    chart_rows = [
+        {"Scope": "1 — Direct", "t CO₂e/yr": scope1_t},
+        {"Scope": "2 — Purchased energy", "t CO₂e/yr": scope2_t},
+        {
+            "Scope": "3.1 — Purchased goods",
+            "t CO₂e/yr": scope3_1_t if scope3_1_available else 0.0,
+        },
+        {"Scope": "3.11 — Use of sold products", "t CO₂e/yr": scope3_11_t},
+    ]
+    chart_df = pd.DataFrame(chart_rows)
+    fig_scope = px.bar(
+        chart_df,
+        x="Scope",
+        y="t CO₂e/yr",
+        color="Scope",
+        title="Annual GHG emissions by scope (gross, t CO₂e/yr)",
+    )
+    fig_scope.update_layout(
+        plot_bgcolor="#0e1117",
+        paper_bgcolor="#0e1117",
+        font_color="white",
+        showlegend=False,
+        height=380,
+    )
+    st.plotly_chart(fig_scope, use_container_width=True)
+
+    st.markdown("**Scope hotspot view — gross shares (100% normalized)**")
+    if not scope3_1_available:
+        st.info(
+            "ℹ️ Run Module 3 (Portfolio CO₂ Simulator) first to populate Scope 3.1 — "
+            "the 100% normalized view needs it to avoid misreading shares. "
+            "Scopes 1, 2, and 3.11 are always computed from sourced defaults."
+        )
+    else:
+        total_gross_t = scope1_t + scope2_t + scope3_1_t + scope3_11_t
+        if total_gross_t <= 0:
+            st.caption("Total gross emissions are zero — nothing to normalize.")
+        else:
+            share_rows = [
+                {
+                    "Scope": "1 — Direct",
+                    "Share (%)": scope1_t / total_gross_t * 100,
+                    "Abs (t CO₂e/yr)": scope1_t,
+                },
+                {
+                    "Scope": "2 — Purchased energy",
+                    "Share (%)": scope2_t / total_gross_t * 100,
+                    "Abs (t CO₂e/yr)": scope2_t,
+                },
+                {
+                    "Scope": "3.1 — Purchased goods",
+                    "Share (%)": scope3_1_t / total_gross_t * 100,
+                    "Abs (t CO₂e/yr)": scope3_1_t,
+                },
+                {
+                    "Scope": "3.11 — Use of sold products",
+                    "Share (%)": scope3_11_t / total_gross_t * 100,
+                    "Abs (t CO₂e/yr)": scope3_11_t,
+                },
+            ]
+            share_df = pd.DataFrame(share_rows)
+            fig_stack = go.Figure()
+            for _, r in share_df.iterrows():
+                fig_stack.add_trace(
+                    go.Bar(
+                        name=r["Scope"],
+                        x=["Portfolio scope mix"],
+                        y=[r["Share (%)"]],
+                        text=[
+                            f"{r['Share (%)']:.1f}%<br>({r['Abs (t CO₂e/yr)']:,.0f} t/yr)"
+                        ],
+                        textposition="inside",
+                        hovertemplate=(
+                            f"{r['Scope']}<br>"
+                            f"Share: {r['Share (%)']:.1f}%<br>"
+                            f"Absolute: {r['Abs (t CO₂e/yr)']:,.0f} t CO₂e/yr"
+                            "<extra></extra>"
+                        ),
+                    )
+                )
+            fig_stack.update_layout(
+                barmode="stack",
+                title="Scope hotspot view — gross GHG emissions by share (%)",
+                yaxis_title="Share of gross emissions (%)",
+                yaxis=dict(range=[0, 100], ticksuffix="%"),
+                plot_bgcolor="#0e1117",
+                paper_bgcolor="#0e1117",
+                font_color="white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                height=420,
+                showlegend=True,
+            )
+            st.plotly_chart(fig_stack, use_container_width=True)
+            st.caption(
+                "Bar sums to 100% of gross Scope 1 + 2 + 3.1 + 3.11. Module D "
+                "(Scope 3.12) is a beyond-boundary credit per EN 15804 and is not "
+                "netted into this view. The largest segment is the scope hotspot."
+            )
+
+    st.download_button(
+        "⬇ Export GHG Scope 1/2/3 Report (CSV)",
+        report_df.to_csv(index=False).encode("utf-8"),
+        file_name="ghg_scope_1_2_3_report.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    st.divider()
+    st.subheader("📋 What is NOT in this report (honest-scope disclosure)")
+    st.warning(
+        "- **Scope 1 — fugitive SF₆ emissions:** not modelled — Phase 2 (gas-insulated switchgear leakage data).\n"
+        "- **Scope 3.4 — upstream transport (A4–A5):** not in any module — Phase 2.\n"
+        "- **Scope 3.12 gross C1–C4:** Module 2 only quantifies the Module D recovery credit; gross "
+        "end-of-life emissions (deconstruction, transport, processing, disposal) await Phase 2 partner "
+        "process data.\n"
+        "- **Other Scope 3 categories:** business travel (Cat 6), employee commuting (Cat 7), upstream/downstream leases, "
+        "investments (Cat 15) — outside this tool's boundary; use corporate carbon platforms.\n"
+        "- **Module D netting:** shown for transparency. Standard CSRD practice reports it separately as beyond-boundary credit, "
+        "not netted against gross Scope 3 totals."
+    )
+
+elif module == "5. About & Source Code":
     st.header("About & Source Code")
     st.markdown(
         """
@@ -1288,6 +1720,7 @@ elif module == "4. About & Source Code":
         | **1. TCO & Carbon ROI** | B1–B6 (use phase) | Lifetime cost & carbon of standard vs. high-efficiency designs — NPV TCO, lifetime CO₂ savings, and payback |
         | **2. Circularity & EOL Planner** | C1–C4 + Module D | Retrofill vs. decommissioning trade-offs and Module D recovery credits from sourced recovery rates |
         | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon from BOM → portfolio, with factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e) |
+        | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 outputs into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
         """
     )
     st.divider()

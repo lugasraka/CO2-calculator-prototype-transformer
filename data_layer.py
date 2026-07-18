@@ -62,6 +62,34 @@ def load_transformer_presets() -> pd.DataFrame:
     return pd.read_csv(DATA_DIR / "transformer_presets.csv")
 
 
+@st.cache_data
+def load_factory_energy() -> pd.DataFrame:
+    """Per-family factory gas & electricity consumption per manufactured unit.
+
+    Drives the GHG-Protocol Scope 1 (fuel combustion) and Scope 2 (purchased
+    electricity) estimates in Module 4. Values are representative Phase 1
+    placeholders pending metered MES/EMS data in Phase 2.
+    """
+    return pd.read_csv(DATA_DIR / "factory_energy.csv")
+
+
+def factory_energy_by_family() -> dict:
+    """``{family: {gas_kwh_per_unit, electricity_kwh_per_unit}}`` for Module 4."""
+    df = load_factory_energy()
+    families = df["family"].drop_duplicates().tolist()
+    return {
+        fam: {
+            "gas_kwh_per_unit": float(
+                df.loc[df["family"] == fam, "natural_gas_kwh_per_unit"].iloc[0]
+            ),
+            "electricity_kwh_per_unit": float(
+                df.loc[df["family"] == fam, "electricity_kwh_per_unit"].iloc[0]
+            ),
+        }
+        for fam in families
+    }
+
+
 def _category(category: str, selectable_only: bool = False) -> pd.DataFrame:
     df = load_material_factors()
     df = df[df["category"] == category]

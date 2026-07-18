@@ -5,3 +5,5 @@ operating_hours,8760,h/yr,Continuous energisation (24/7)
 loading_factor,0.60,fraction,Representative average transformer loading
 eval_years,15,yr,Standard loss-evaluation horizon
 discount_rate,0.05,fraction,Representative weighted average cost of capital
+natural_gas_emission_factor,0.18,kg CO2e/kWh,Defra/BEIS natural gas combustion factor (Scope 1 factory fuel)
+factory_electricity_factor,0.30,kg CO2e/kWh,EU grid average (location-based Scope 2 — to be replaced by regional/market-based factor)

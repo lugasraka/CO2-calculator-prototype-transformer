@@ -23,13 +23,14 @@ A decision-support platform that translates **material and design choices** into
 **fleet-wide carbon outcomes**, so R&D and procurement can target the highest-impact
 reductions with data instead of guesswork.
 
-Today it is a Streamlit prototype with three modules mapped to lifecycle stages:
+Today it is a Streamlit prototype with four modules mapped to lifecycle stages and corporate reporting scopes:
 
 | Module | Lifecycle scope | Job-to-be-done |
 |--------|-----------------|----------------|
 | **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via lifetime TCO, use-phase carbon savings, and payback |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Quantify retrofill vs. decommission trade-offs and the Module D recovery credit from sourced recovery rates |
 | **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, scenario comparison |
+| **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
 
 **Target users:** R&D / design engineers, sustainability leads, procurement & supply-chain
 teams, and PLM gate reviewers.
@@ -74,6 +75,10 @@ teams, and PLM gate reviewers.
   bands and chart error bars) — no more point-estimate-only results.
 - ✅ Gate KPI per class (kg CO₂e/kVA), per-lever abatement cost (€/t CO₂e) from
   representative cost deltas, and a data-freshness banner driven by factor `valid_to` dates.
+- ✅ Module 4 GHG Scope 1/2/3 reporting view — rebuckets Modules 1–3 outputs into
+  GHG-Protocol scopes (1, 2, 3.1, 3.11, 3.12), with editable per-family factory-energy
+  inputs (`data/factory_energy.csv`) for indicative Scope 1 & 2 estimates until Phase 2
+  metered factory data.
 
 ### 🔜 Phase 2 — Real Data Integration  *(3–9 mo)*
 **Theme: connect to live enterprise systems.**
@@ -89,6 +94,9 @@ teams, and PLM gate reviewers.
   (A1–C4 + Module D), with a lifecycle-stage dimension on every emission line.
 - Supplier-specific carbon factors tied to a supplier master.
 - Add A4–A5 (transport & installation) coverage.
+- Replace indicative Module 4 factory-energy estimates with **metered factory gas &
+  electricity** per plant and product line (MES/EMS integration); add Scope 1 fugitive
+  SF₆ leakage; gross C1–C4 emissions from partner process data.
 
 ### 🔮 Phase 3 — Decision Intelligence  *(9–18 mo)*
 **Theme: from calculator to advisor.**
@@ -142,7 +150,7 @@ The core trajectory: **from constants-in-code → a versioned, sourced, relation
 
 | Phase | Data-model evolution |
 |-------|----------------------|
-| **1 (done)** | Coefficients, BOM, EOL recovery rates & energy/evaluation assumptions extracted to sourced CSVs with uncertainty + provenance; scenarios/runs persisted in `scenario` + `simulation_run` tables (SQLite). |
+| **1 (done)** | Coefficients, BOM, EOL recovery rates, energy/evaluation assumptions & factory-energy per unit extracted to sourced CSVs with uncertainty + provenance; scenarios/runs persisted in `scenario` + `simulation_run` tables (SQLite). Module 4 reads the factory-energy CSV for Scope 1 & 2 estimates. |
 | **2** | `product` + `bom_line` tables fed by real PLM/ERP; factors gain supplier + lifecycle-stage dimensions; static CSVs swapped for partner factor/EPD feeds. |
 | **3** | Time-series `volume_forecast` (year × region); optimisation & MAC-curve views read cost + carbon jointly; scenario results become comparable over time. |
 | **4** | Owner / tenant on every record; temporal `valid_from` / `valid_to` on all assumptions; full audit trail for assurance; regional & regulatory dimensions. |
@@ -167,6 +175,9 @@ optimisation, assurance, SBTi tracking) depends on that separation being in plac
   extraction through factory gate.
 - Use-phase energy losses (B1–B6) are addressed in Module 1.
 - End-of-life (C1–C4) and recycling credits (Module D) are addressed in Module 2.
+- Module 4 rebuckets Modules 1–3 into GHG-Protocol Scope 1/2/3 for corporate reporting.
+  Scope 1 & 2 use indicative factory-energy estimates — full metered factory data is a
+  **Phase 2** deliverable.
 - Full cradle-to-grave integration (A1–C4 + Module D) is a **Phase 2** deliverable.
 
 ---
