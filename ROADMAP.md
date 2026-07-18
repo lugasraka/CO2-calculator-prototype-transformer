@@ -66,6 +66,10 @@ teams, and PLM gate reviewers.
 - ✅ Model Module 1 use-phase cost **and** carbon from first principles (loss energy →
   NPV TCO + lifetime CO₂ + payback), with assumptions and design presets sourced from
   `energy_params.csv` / `transformer_presets.csv`.
+- ✅ Surface uncertainty bounds in portfolio outputs (low–high factor ranges as KPI
+  bands and chart error bars) — no more point-estimate-only results.
+- ✅ Gate KPI per class (kg CO₂e/kVA), per-lever abatement cost (€/t CO₂e) from
+  representative cost deltas, and a data-freshness banner driven by factor `valid_to` dates.
 
 ### 🔜 Phase 2 — Real Data Integration  *(3–9 mo)*
 **Theme: connect to live enterprise systems.**

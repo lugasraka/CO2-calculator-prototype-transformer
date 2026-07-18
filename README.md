@@ -12,7 +12,7 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 |--------|-------------|
 | **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
-| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. |
+| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Outputs carry factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e). |
 
 ## Setup
 
@@ -158,7 +158,7 @@ erDiagram
 
 | File | Purpose |
 |------|---------|
-| `data/material_factors.csv` | Per-material CO₂ intensity (kg CO₂e/kg), uncertainty range, supplier programme, source & version |
+| `data/material_factors.csv` | Per-material CO₂ intensity (kg CO₂e/kg), uncertainty range, cost delta vs. baseline (€/kg), supplier programme, source & version |
 | `data/bom.csv` | Long-format bill-of-material masses per transformer class |
 | `data/recovery_factors.csv` | Per-component end-of-life recovery rates & routes (Module 2 Module D credits) |
 | `data/energy_params.csv` | Operating & evaluation assumptions for Module 1 (grid intensity, energy price, hours, loading, horizon, discount rate) |

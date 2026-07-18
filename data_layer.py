@@ -70,16 +70,67 @@ def _category(category: str, selectable_only: bool = False) -> pd.DataFrame:
     return df
 
 
-def selector_options(category: str) -> dict:
-    """Ordered ``{selector_label: kg_co2e_per_kg}`` for a Scenario-B selectbox."""
+def factor_details(category: str) -> dict:
+    """Ordered ``{selector_label: {ci, low, high, cost_delta}}`` for selectboxes.
+
+    Each selectable Scenario-B option carries its expected carbon intensity, the
+    sourced uncertainty bounds and the material cost delta vs. baseline (€/kg).
+    """
     df = _category(category, selectable_only=True)
-    return {row.selector_label: float(row.kg_co2e_per_kg) for row in df.itertuples()}
+    return {
+        row.selector_label: {
+            "ci": float(row.kg_co2e_per_kg),
+            "low": float(row.uncertainty_low),
+            "high": float(row.uncertainty_high),
+            "cost_delta": float(row.cost_delta_eur_per_kg),
+        }
+        for row in df.itertuples()
+    }
+
+
+def baseline_details(category: str) -> dict:
+    """Factor detail (CI + uncertainty bounds) of the baseline material."""
+    df = _category(category)
+    row = df[df["is_baseline"] == 1].iloc[0]
+    return {
+        "ci": float(row["kg_co2e_per_kg"]),
+        "low": float(row["uncertainty_low"]),
+        "high": float(row["uncertainty_high"]),
+        "cost_delta": 0.0,
+    }
 
 
 def baseline_factor(category: str) -> float:
     """kg CO₂e/kg of the baseline (current-BOM) material in a category."""
-    df = _category(category)
-    return float(df[df["is_baseline"] == 1].iloc[0]["kg_co2e_per_kg"])
+    return baseline_details(category)["ci"]
+
+
+def _parse_kva(kva_class: str) -> float:
+    """Numeric kVA rating from labels like ``1000 kVA`` or ``25 MVA``."""
+    parts = str(kva_class).replace(",", "").split()
+    value = float(parts[0])
+    return value * 1_000 if any("MVA" in p.upper() for p in parts[1:]) else value
+
+
+def kva_by_family() -> dict:
+    """``{family: rated kVA}`` parsed from the BOM ``kva_class`` labels."""
+    df = load_bom().drop_duplicates("family")
+    return {row.family: _parse_kva(row.kva_class) for row in df.itertuples()}
+
+
+def factor_validity() -> dict:
+    """Earliest factor expiry date and the material(s) expiring then.
+
+    Drives the data-freshness banner: sourced factors carry ``valid_to`` dates,
+    and gate decisions shouldn't rest on factors past (or near) their validity.
+    """
+    df = load_material_factors()
+    valid_to = pd.to_datetime(df["valid_to"])
+    earliest = valid_to.min()
+    return {
+        "earliest_expiry": earliest.date(),
+        "expiring_materials": df.loc[valid_to == earliest, "ref_name"].tolist(),
+    }
 
 
 def bom_by_family() -> dict:
@@ -109,6 +160,7 @@ def reference_table() -> pd.DataFrame:
                 for low, high in zip(df["uncertainty_low"], df["uncertainty_high"])
             ],
             "vs. Baseline": df["vs_baseline"],
+            "Cost Δ vs. baseline (€/kg)": df["cost_delta_eur_per_kg"],
             "Supplier programme": df["supplier_programme"],
             "Source": df["source"] + " " + df["source_version"].fillna(""),
         }
