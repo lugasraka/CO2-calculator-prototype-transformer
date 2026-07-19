@@ -12,7 +12,7 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 |--------|-------------|
 | **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
-| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Engineers can compare a saved baseline with up to three alternatives in a design-gate view, with a transparent carbon-first recommendation, cost trade-offs, uncertainty, and CSV export. |
+| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Engineers can compare a saved baseline with up to three alternatives in a design-gate view, with a transparent carbon-first recommendation, an optional **cost-ceiling constraint** to keep recommendations feasible for procurement, an **EPDi industry benchmark** column for context, cost trade-offs, uncertainty, and CSV export. |
 | **4. GHG Scope 1/2/3 Report** | Aggregates Modules 1–3 into a corporate GHG-Protocol reporting view (Scope 1 factory fuel, Scope 2 factory electricity, Scope 3 Cat 1 / 11 / 12). Includes editable per-family factory-energy inputs (`data/factory_energy.csv`) and CSV export. Scope 1 & 2 use Phase 1 indicative estimates until Phase 2 metered factory data. |
 
 ## Competitive position
@@ -64,7 +64,8 @@ flowchart TD
         RF["recovery_factors.csv<br/>EOL recovery rates"]
         EP["energy_params.csv +<br/>transformer_presets.csv"]
         FE["factory_energy.csv<br/>per-unit factory gas & electricity"]
-        DB["runs.db (SQLite)<br/>saved scenarios & runs"]
+        BM["benchmarks.csv<br/>EPDi per-family kg CO₂e/kVA"]
+        DB["runs.db (SQLite)<br/>saved scenarios, runs, M2 EOL, prefs"]
     end
 
     subgraph FUTURE["🔮 Phase 2+ (planned)"]
@@ -77,12 +78,13 @@ flowchart TD
     M4 -->|aggregate M1-M3 outputs| CALC
     CALC --> DL
     M3 -->|save / design-gate compare / export| SS
-    M4 -->|read saved session state| SS
+    M4 -->|read latest saved run from runs.db| SS
     DL --> MF
     DL --> BOM
     DL --> RF
     DL --> EP
     DL --> FE
+    DL --> BM
     SS --> DB
     FEED -.replaces CSVs.-> DL
 
@@ -96,10 +98,11 @@ their results through `scenario_store.py`. Module 2 reads the same BOM masses,
 baseline factors, and per-material recovery rates to quantify end-of-life recovery
 credits; Module 1 reads sourced energy assumptions and transformer presets to model
 use-phase cost and carbon. Module 4 is an **aggregation/reporting layer**: it
-re-buckets the latest Module 1–3 outputs (read from Streamlit session state) into
-GHG-Protocol Scope 1/2/3 categories and adds new factory-energy inputs (Scope 1 & 2)
-via `data/factory_energy.csv`. All go through the same `data_layer.py` interface, so
-in Phase 2 the static CSVs are swapped for partner factor/EPD data feeds behind it.
+re-buckets the latest Module 1–3 outputs (read from `runs.db`, the SQLite store)
+into GHG-Protocol Scope 1/2/3 categories and adds new factory-energy inputs
+(Scope 1 & 2) via `data/factory_energy.csv`. All go through the same
+`data_layer.py` interface, so in Phase 2 the static CSVs are swapped for partner
+factor/EPD data feeds behind it.
 
 > An **Environmental Product Declaration (EPD)** is a standardized, independently
 > verified report of a product's lifecycle environmental impacts, including embodied
@@ -108,100 +111,46 @@ in Phase 2 the static CSVs are swapped for partner factor/EPD data feeds behind 
 
 ## Data model (Phase 1)
 
-Reference data is separated from the calculation logic. Carbon-intensity
-coefficients and bill-of-material masses live in sourced, versioned CSVs under
-`data/`, loaded through `data_layer.py` — replacing the previously hardcoded
-Python dicts. Each factor carries an uncertainty range and provenance
-(source + version + validity dates), the groundwork for the Phase 2 live
-PLM/EPD data feeds.
+Reference data lives in sourced CSVs under `data/`; user-generated state lives in
+`data/runs.db` (SQLite). `data_layer.py` and `scenario_store.py` expose both
+through one interface — the seam Phase 2 partner feeds plug into without
+touching `app.py`. Every factor carries provenance + `valid_from` / `valid_to`;
+a freshness banner warns within 180 days of expiry.
+
+| Entity | Where | Key | Notes |
+|--------|-------|-----|-------|
+| `MATERIAL_FACTOR` | `data/material_factors.csv` | `material_id` | per-material kg CO₂e/kg, uncertainty range, cost Δ, source, version, validity window |
+| `BOM_LINE` | `data/bom.csv` | `(family, component)` | per-family BOM masses (core / copper / fluid / insulation / structural) |
+| `RECOVERY_FACTOR` | `data/recovery_factors.csv` | `component` | EOL recovery rate, route, secondary-material note |
+| `FACTORY_ENERGY` | `data/factory_energy.csv` | `family` | per-family gas + electricity per unit → Scope 1/2 |
+| `BENCHMARK` | `data/benchmarks.csv` | `family` | EPDi industry average kg CO₂e/kVA, source ID, validity |
+| `ENERGY_PARAMS` | `data/energy_params.csv` | `parameter` | key/value — grid intensity, energy price, hours, loading, discount rate, emission factors |
+| `TRANSFORMER_PRESETS` | `data/transformer_presets.csv` | `(design, rating_kva)` | Standard vs. Eco-Efficient CAPEX and loss presets per rating |
+| `SCENARIO` | `scenario` (SQLite) | `scenario_id` | name + 3 `MATERIAL_FACTOR.selector_label` choices (core/fluid/copper) + volume forecast |
+| `SIMULATION_RUN` | `simulation_run` (SQLite) | `run_id` | `scenario_id` FK; portfolio totals + `results_json` (per-family table) |
+| `MODULE2_EOL` | `module2_eol` (SQLite) | `eol_id` | Module 2 decommissioning output → consumed by Module 4 Scope 3.12 |
+| `APP_PREFERENCE` | `app_preference` (SQLite) | `key` | generic k/v; today holds the design-gate cost-ceiling % |
 
 ```mermaid
 erDiagram
-    MATERIAL_FACTOR {
-        string material_id PK
-        string category
-        string selector_label
-        float  kg_co2e_per_kg
-        float  uncertainty_low
-        float  uncertainty_high
-        bool   is_baseline
-        string source
-        string source_version
-        date   valid_from
-        date   valid_to
-    }
-    BOM_LINE {
-        string family
-        string kva_class
-        string component
-        float  mass_kg
-        string source
-    }
-    RECOVERY_FACTOR {
-        string component PK
-        float  recovery_rate
-        string recovery_route
-        string secondary_material_note
-        string source
-    }
-    FACTORY_ENERGY {
-        string family PK
-        float  natural_gas_kwh_per_unit
-        float  electricity_kwh_per_unit
-        string source
-    }
-    SCENARIO {
-        int    scenario_id PK
-        string name
-        string core_choice
-        string fluid_choice
-        string copper_choice
-        int    vol_dist
-        int    vol_med
-        int    vol_large
-        string created_at
-    }
-    SIMULATION_RUN {
-        int    run_id PK
-        int    scenario_id FK
-        float  total_base
-        float  total_eco
-        float  total_saving
-        float  pct_saving
-        json   results_json
-        string created_at
-    }
-
-    SCENARIO ||--|| SIMULATION_RUN : "produces"
-    MATERIAL_FACTOR }o--o{ SCENARIO : "chosen as core/fluid/copper lever"
-    BOM_LINE }o--o{ SIMULATION_RUN : "aggregated per family"
-    RECOVERY_FACTOR }o--|| BOM_LINE : "recovery rate per component"
-    FACTORY_ENERGY ||--|| BOM_LINE : "per-family factory energy for Module 4"
+    MATERIAL_FACTOR    }o--o{ SCENARIO         : "core/fluid/copper_choice → selector_label"
+    SCENARIO           ||--|| SIMULATION_RUN   : "produces 1 run (results_json holds per-family table)"
+    BOM_LINE           }o--o{ SIMULATION_RUN   : "aggregated per family into results_json"
+    BENCHMARK          ||--o{ BOM_LINE         : "family = key"
+    RECOVERY_FACTOR    ||--o{ BOM_LINE         : "component = key"
+    FACTORY_ENERGY     ||--o{ BOM_LINE         : "family = key"
+    MODULE2_EOL        }o--o{ FACTORY_ENERGY   : "per-family decommissioning volumes"
+    APP_PREFERENCE     ||--o{ SCENARIO         : "key=cost_ceiling_pct, read by design-gate filter"
 ```
 
-- **`MATERIAL_FACTOR`**, **`BOM_LINE`** and **`RECOVERY_FACTOR`** are the sourced reference data (CSV, read-only in the app).
-- **`SCENARIO`** and **`SIMULATION_RUN`** are user-generated and persisted in `runs.db` (SQLite).
-- Each scenario's lever choices reference a `MATERIAL_FACTOR`; each run aggregates `BOM_LINE` masses into portfolio CO₂ totals. Module 2 combines `BOM_LINE` masses with `RECOVERY_FACTOR` rates and baseline `MATERIAL_FACTOR` intensities to compute Module D credits. Module 4 reads `FACTORY_ENERGY` to estimate Scope 1 & 2, and rebuckets the latest Module 1–3 outputs into Scope 3 categories.
-
-| File | Purpose |
-|------|---------|
-| `data/material_factors.csv` | Per-material CO₂ intensity (kg CO₂e/kg), uncertainty range, cost delta vs. baseline (€/kg), supplier programme, source & version |
-| `data/bom.csv` | Long-format bill-of-material masses per transformer class |
-| `data/recovery_factors.csv` | Per-component end-of-life recovery rates & routes (Module 2 Module D credits) |
-| `data/energy_params.csv` | Operating & evaluation assumptions for Module 1 (grid intensity, energy price, hours, loading, horizon, discount rate) |
-| `data/transformer_presets.csv` | Standard vs. Eco-Efficient CAPEX and loss presets per rating (Module 1) |
-| `data/factory_energy.csv` | Per-family factory gas & electricity per unit (Scope 1 & 2, Module 4) |
-| `data_layer.py` | Cached access layer exposing factors, BOM, recovery rates, energy params and the reference table to the app |
-| `scenario_store.py` | SQLite-backed persistence for named scenarios and simulation runs (`data/runs.db`) |
-
-Module 3 lets engineers **save named scenarios** and use a **Design-Gate Comparison**
-workspace to select one saved baseline and up to three saved alternatives. It compares
-portfolio embodied carbon, relative carbon reduction, annual material-cost delta,
-abatement cost, and factor uncertainty. The recommendation is deliberately
-transparent: it selects the lowest-carbon alternative, using material cost only to
-break a carbon tie. The comparison and per-family results can be exported to CSV.
-Saved runs persist locally in `data/runs.db` (gitignored, regenerated at runtime).
-Module 2 exports its portfolio and per-component Module D credit tables to CSV.
+SQLite has no FK constraints here — joins happen at read time in
+`data_layer.py` / `scenario_store.py`. Only `SCENARIO → SIMULATION_RUN` is a real
+DB-level FK (`scenario_id`). `BENCHMARK`, `RECOVERY_FACTOR` and `FACTORY_ENERGY`
+stay as separate CSVs (not normalised into the BOM) so each has its own
+provenance and validity window, and a Phase 2 partner-feed swap is a single
+file. `MODULE2_EOL` lives in SQLite (not session state) so Module 4's report
+survives tab refresh, multi-tab, and mobile views. `APP_PREFERENCE` is the
+natural home for future user settings (regional grid factor, currency, etc.).
 
 ## Scope
 

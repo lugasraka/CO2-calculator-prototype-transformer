@@ -68,6 +68,11 @@ teams, and PLM gate reviewers.
 - ✅ Design-Gate Comparison for engineers: compare one saved baseline with up to three
   alternatives; show carbon, cost, abatement cost, and uncertainty; export the
   comparison; and make a transparent carbon-first recommendation.
+- ✅ **Cost-ceiling constraint in design-gate comparison** — engineer sets a max material
+  cost premium (%) vs. the baseline's green premium; alternatives above the ceiling are
+  flagged and excluded from the recommendation (with the exclusion named in the success
+  message). The seed of Phase 3's "constraint-aware design selection" shipped now
+  because it unblocks procurement adoption of carbon-first choices.
 - ✅ Export per-family results (CSV) for gate reviews.
 - ✅ Quantify Module 2 end-of-life outcomes — avoided-replacement carbon (retrofill) and
   the Module D recovery credit — from a sourced `recovery_factors.csv`, with CSV export.
@@ -78,10 +83,16 @@ teams, and PLM gate reviewers.
   bands and chart error bars) — no more point-estimate-only results.
 - ✅ Gate KPI per class (kg CO₂e/kVA), per-lever abatement cost (€/t CO₂e) from
   representative cost deltas, and a data-freshness banner driven by factor `valid_to` dates.
+- ✅ **Industry benchmark column** in the per-family table — kg CO₂e/kVA results now sit
+  next to an EPDi average from `data/benchmarks.csv` (n, source EPDs, validity dates
+  documented). Without context a gate KPI is a number in a vacuum; the benchmark is the
+  fix. Replace static CSV with the EPDi data feed in Phase 2.
 - ✅ Module 4 GHG Scope 1/2/3 reporting view — rebuckets Modules 1–3 outputs into
   GHG-Protocol scopes (1, 2, 3.1, 3.11, 3.12), with editable per-family factory-energy
   inputs (`data/factory_energy.csv`) for indicative Scope 1 & 2 estimates until Phase 2
-  metered factory data.
+  metered factory data. **Module 4 now reads the latest saved Module 3 / Module 2 run
+  from `runs.db` instead of Streamlit session state** — Scope 3.1 and 3.12 survive
+  tab refresh, multi-tab and mobile views.
 
 ### 🔜 Phase 2 — Real Data Integration  *(3–9 mo)*
 **Theme: connect to live enterprise systems.**
@@ -93,6 +104,8 @@ teams, and PLM gate reviewers.
   EPD outputs (ILCD+EPD / OpenEPD) rather than building a competing factor database.
   *(An Environmental Product Declaration (EPD) is a standardized, independently verified
   report of a product's lifecycle environmental impacts, including embodied CO₂.)*
+- **Replace static `benchmarks.csv` with the EPDi / One Click LCA platform feed** so
+  the per-family benchmark stays current without manual curation.
 - **Full lifecycle unification:** merge Modules 1–3 under one cradle-to-grave engine
   (A1–C4 + Module D), with a lifecycle-stage dimension on every emission line.
 - Supplier-specific carbon factors tied to a supplier master.
@@ -104,9 +117,11 @@ teams, and PLM gate reviewers.
 ### 🔮 Phase 3 — Decision Intelligence  *(9–18 mo)*
 **Theme: from calculator to advisor.**
 
-- **Constraint-aware design selection:** extend the shipped carbon-first comparison
-  with cost ceilings, minimum carbon-reduction targets, loss-performance limits, and
-  approved-material constraints so recommendations remain feasible in an engineering gate.
+- **Constraint-aware design selection:** extend the Phase 1 cost-ceiling slider with
+  minimum carbon-reduction targets, loss-performance limits, and approved-material
+  constraints so recommendations remain feasible in an engineering gate. The cost
+  ceiling already ships today as the highest-leverage constraint; the rest follow
+  the same primitive.
 - **Abatement economics as the signature output:** extend the shipped per-lever €/t
   ranking into full **marginal abatement cost curves** (CO₂ vs. €) linking Module 1 +
   Module 3 — uncontested white space across all five competitors scanned.
@@ -166,8 +181,14 @@ The core trajectory: **from constants-in-code → a versioned, sourced, relation
 - `MATERIAL_FACTOR` — sourced carbon-intensity factors (CSV, read-only)
 - `BOM_LINE` — bill-of-material masses per transformer class (CSV, read-only)
 - `RECOVERY_FACTOR` — per-component end-of-life recovery rates & routes (CSV, read-only)
+- `BENCHMARK` — per-family industry benchmark kg CO₂e/kVA from EPDi EPDs (CSV, read-only)
+- `FACTORY_ENERGY` — per-family factory gas & electricity per unit (CSV, read-only)
 - `SCENARIO` — a named set of design-lever choices + volume forecast (SQLite)
 - `SIMULATION_RUN` — computed portfolio results for a scenario (SQLite)
+- `MODULE2_EOL` — Module 2 decommissioning-branch output (SQLite, persisted so Module 4
+  can read it after a tab refresh)
+- `APP_PREFERENCE` — single-row app preferences keyed by string (SQLite; holds the
+  last-used cost-ceiling %)
 
 **Key principle:** the single most important data-model improvement — already done in
 Phase 1 — is *separating the data from the model*. Everything downstream (live feeds,

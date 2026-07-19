@@ -40,7 +40,9 @@ def saved_run_decision_metrics(run: pd.Series) -> dict:
     results = store.get_run_results(int(run["run_id"]))
 
     def total_for(prefix: str) -> float:
-        column = next((name for name in results.columns if name.startswith(prefix)), None)
+        column = next(
+            (name for name in results.columns if name.startswith(prefix)), None
+        )
         if column is None:
             return 0.0
         return float(pd.to_numeric(results[column], errors="coerce").fillna(0).sum())
@@ -405,6 +407,11 @@ elif module == "2. Circularity & EOL Planner":
             "total_units": int(total_units),
             "volumes": {fam: float(volumes[fam]) for fam in BOM.keys()},
         }
+        store.save_module2_eol(
+            total_portfolio_kt=float(total_portfolio_kt),
+            total_units=int(total_units),
+            volumes={fam: float(volumes[fam]) for fam in BOM.keys()},
+        )
         st.download_button(
             "⬇ Export portfolio credit (CSV)",
             portfolio_df.to_csv(index=False).encode("utf-8"),
@@ -962,6 +969,38 @@ elif module == "3. Portfolio CO₂ Simulator ★":
 
         # ── PRODUCT-FAMILY TABLE ──────────────────────────────────────────
         st.markdown("**Bottom-up CO₂ by product family**")
+        benchmarks = dl.benchmarks_by_family()
+
+        def _benchmark_row(family: str) -> dict:
+            bench = benchmarks.get(family)
+            if bench is None:
+                return {
+                    "Benchmark (kg CO₂e/kVA)": "—",
+                    "vs. Benchmark (Eco)": "—",
+                    "vs. Benchmark (Baseline)": "—",
+                }
+            return {
+                "Benchmark (kg CO₂e/kVA)": round(bench["kg_co2e_per_kva"], 2),
+                "vs. Benchmark (Eco)": bench["kg_co2e_per_kva"],
+                "vs. Benchmark (Baseline)": bench["kg_co2e_per_kva"],
+            }
+
+        bench_data = pd.DataFrame([_benchmark_row(fam) for fam in df["Product Family"]])
+        df_display = pd.concat([df.reset_index(drop=True), bench_data], axis=1)
+        df_display["vs. Benchmark (Eco)"] = (
+            (df_display["Eco kg CO₂e/kVA"] - df_display["vs. Benchmark (Eco)"])
+            / df_display["vs. Benchmark (Eco)"]
+            * 100
+        ).map(lambda v: f"{v:+.1f}%" if pd.notna(v) else "—")
+        df_display["vs. Benchmark (Baseline)"] = (
+            (
+                df_display["Baseline kg CO₂e/kVA"]
+                - df_display["vs. Benchmark (Baseline)"]
+            )
+            / df_display["vs. Benchmark (Baseline)"]
+            * 100
+        ).map(lambda v: f"{v:+.1f}%" if pd.notna(v) else "—")
+
         display_cols = [
             "Product Family",
             "Units/yr",
@@ -970,10 +1009,22 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             "Reduction/unit (t)",
             "Baseline kg CO₂e/kVA",
             "Eco kg CO₂e/kVA",
+            "Benchmark (kg CO₂e/kVA)",
+            "vs. Benchmark (Eco)",
+            "vs. Benchmark (Baseline)",
             "Portfolio Saving (kt/yr)",
         ]
         st.dataframe(
-            df[display_cols].set_index("Product Family"), use_container_width=True
+            df_display[display_cols].set_index("Product Family"),
+            use_container_width=True,
+        )
+        benchmark_source = next(
+            iter({b["source_id"] for b in benchmarks.values()}), "EPDi"
+        )
+        st.caption(
+            f"Industry benchmark reference: **{benchmark_source}** — EPDi average kg CO₂e/kVA "
+            f"for comparable transformer classes. External reference only, not a target; "
+            f"see `data/benchmarks.csv` for n, source EPDs and validity dates."
         )
 
         # ── WATERFALL: LEVER ATTRIBUTION ─────────────────────────────────
@@ -1211,13 +1262,33 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             key="design_gate_alternatives",
         )
 
+        _default_ceiling = store.get_preference("cost_ceiling_pct")
+        cost_ceiling_pct = st.slider(
+            "Max material cost premium vs. baseline (%)",
+            min_value=0,
+            max_value=50,
+            value=int(_default_ceiling) if _default_ceiling is not None else 10,
+            step=1,
+            key="design_gate_cost_ceiling",
+            help=(
+                "Alternatives whose annual material cost premium exceeds this share of "
+                "the baseline's green premium are excluded from the recommendation. "
+                "Lower-cost alternatives always pass."
+            ),
+        )
+        store.set_preference("cost_ceiling_pct", str(cost_ceiling_pct))
+
         if not alternative_labels:
-            st.caption("Select one to three alternatives to make a design-gate comparison.")
+            st.caption(
+                "Select one to three alternatives to make a design-gate comparison."
+            )
         else:
-            baseline = saved[
-                saved["run_id"] == gate_label_to_id[baseline_label]
-            ].iloc[0]
+            baseline = saved[saved["run_id"] == gate_label_to_id[baseline_label]].iloc[
+                0
+            ]
             baseline_metrics = saved_run_decision_metrics(baseline)
+            baseline_cost_k_eur = float(baseline_metrics["green_premium_k_eur"])
+            ceiling_k_eur = baseline_cost_k_eur * cost_ceiling_pct / 100
             comparison_rows = [
                 {
                     "Scenario": baseline["name"],
@@ -1226,6 +1297,8 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                     "Carbon change (kt/yr)": 0.0,
                     "Carbon reduction": 0.0,
                     "Material cost delta (kEUR/yr)": 0.0,
+                    "Cost vs. ceiling (%)": 0.0,
+                    "Passes cost ceiling?": "—",
                     "Abatement cost (EUR/tCO2e)": None,
                     "Uncertainty (kt/yr)": (
                         f"{baseline_metrics['eco_low']:.2f}-{baseline_metrics['eco_high']:.2f}"
@@ -1235,9 +1308,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             ]
 
             for label in alternative_labels:
-                candidate = saved[
-                    saved["run_id"] == gate_label_to_id[label]
-                ].iloc[0]
+                candidate = saved[saved["run_id"] == gate_label_to_id[label]].iloc[0]
                 candidate_metrics = saved_run_decision_metrics(candidate)
                 carbon_reduction = (
                     baseline_metrics["portfolio_eco"]
@@ -1247,14 +1318,22 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                     candidate_metrics["green_premium_k_eur"]
                     - baseline_metrics["green_premium_k_eur"]
                 )
+                passes_ceiling = cost_delta <= ceiling_k_eur
+                cost_vs_ceiling_pct = (
+                    (cost_delta / ceiling_k_eur * 100) if ceiling_k_eur > 0 else 0.0
+                )
                 comparison_rows.append(
                     {
                         "Scenario": candidate["name"],
                         "Role": "Alternative",
                         "Portfolio carbon (kt/yr)": candidate_metrics["portfolio_eco"],
                         "Carbon change (kt/yr)": -carbon_reduction,
-                        "Carbon reduction": carbon_reduction / baseline_metrics["portfolio_eco"] * 100,
+                        "Carbon reduction": carbon_reduction
+                        / baseline_metrics["portfolio_eco"]
+                        * 100,
                         "Material cost delta (kEUR/yr)": cost_delta,
+                        "Cost vs. ceiling (%)": cost_vs_ceiling_pct,
+                        "Passes cost ceiling?": "✓" if passes_ceiling else "✗",
                         "Abatement cost (EUR/tCO2e)": (
                             cost_delta / carbon_reduction
                             if carbon_reduction > 0
@@ -1268,25 +1347,59 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                 )
 
             comparison = pd.DataFrame(comparison_rows)
-            recommendation = comparison[
+            candidates = comparison[
                 (comparison["Role"] == "Alternative")
                 & (comparison["Carbon change (kt/yr)"] < 0)
+                & (comparison["Passes cost ceiling?"] == "✓")
             ].sort_values(
                 ["Portfolio carbon (kt/yr)", "Material cost delta (kEUR/yr)"],
                 ascending=[True, True],
             )
 
-            if recommendation.empty:
-                st.warning("None of the selected alternatives lowers portfolio embodied carbon.")
+            if candidates.empty:
+                carbon_only = comparison[
+                    (comparison["Role"] == "Alternative")
+                    & (comparison["Carbon change (kt/yr)"] < 0)
+                ]
+                if carbon_only.empty:
+                    st.warning(
+                        "None of the selected alternatives lowers portfolio embodied carbon."
+                    )
+                else:
+                    excluded_names = ", ".join(
+                        f"'{row['Scenario']}'" for _, row in carbon_only.iterrows()
+                    )
+                    st.warning(
+                        f"No alternative meets both the carbon reduction and the "
+                        f"≤{cost_ceiling_pct}% cost-ceiling constraint. "
+                        f"Excluded by cost ceiling: {excluded_names}. "
+                        f"Loosen the ceiling to see them."
+                    )
             else:
-                winner = recommendation.iloc[0]
+                winner = candidates.iloc[0]
+                excluded = comparison[
+                    (comparison["Role"] == "Alternative")
+                    & (comparison["Passes cost ceiling?"] == "✗")
+                    & (comparison["Carbon change (kt/yr)"] < 0)
+                ]
+                if not excluded.empty:
+                    excluded_list = ", ".join(
+                        "'" + r["Scenario"] + "'" for _, r in excluded.iterrows()
+                    )
+                    exclusion_note = f" — excluded: {excluded_list}"
+                else:
+                    exclusion_note = ""
                 st.success(
                     f"Recommended: {winner['Scenario']} - lowest portfolio embodied carbon "
-                    f"at {winner['Portfolio carbon (kt/yr)']:.2f} ktCO2e/yr."
+                    f"at {winner['Portfolio carbon (kt/yr)']:.2f} ktCO2e/yr "
+                    f"(cost {winner['Material cost delta (kEUR/yr)']:.1f} k€/yr vs. ceiling "
+                    f"{ceiling_k_eur:.1f} k€/yr){exclusion_note}."
                 )
                 st.caption(
-                    "Carbon-first rule: alternatives are ranked by lower portfolio carbon; "
-                    "annual material-cost delta breaks a carbon tie."
+                    f"Carbon-first rule with ≤{cost_ceiling_pct}% cost ceiling: alternatives "
+                    f"are ranked by lower portfolio carbon; annual material-cost delta breaks a "
+                    f"carbon tie. Alternatives that exceed the cost ceiling are excluded from "
+                    f"the recommendation but remain visible in the table for transparency."
                 )
 
             display_comparison = comparison.drop(columns="run_id").copy()
@@ -1295,15 +1408,24 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                 "Carbon change (kt/yr)",
                 "Carbon reduction",
                 "Material cost delta (kEUR/yr)",
+                "Cost vs. ceiling (%)",
                 "Abatement cost (EUR/tCO2e)",
             ]:
                 display_comparison[column] = display_comparison[column].map(
                     lambda value: round(value, 2) if pd.notna(value) else "n/a"
                 )
+            display_comparison = display_comparison.rename(
+                columns={"Cost vs. ceiling (%)": "Cost vs. ceiling (% of cap)"}
+            )
+            csv_buf = display_comparison.to_csv(index=False).encode("utf-8")
+            csv_header = (
+                f"# Cost ceiling: {cost_ceiling_pct}% of baseline green premium "
+                f"({ceiling_k_eur:.2f} kEUR/yr)\n"
+            ).encode("utf-8")
             st.dataframe(display_comparison, use_container_width=True, hide_index=True)
             st.download_button(
                 "Export design-gate comparison (CSV)",
-                data=display_comparison.to_csv(index=False).encode("utf-8"),
+                data=csv_header + csv_buf,
                 file_name="design_gate_comparison.csv",
                 mime="text/csv",
                 use_container_width=False,
@@ -1415,10 +1537,45 @@ elif module == "4. GHG Scope 1/2/3 Report":
 
     sim = st.session_state.get("sim")
     mod2_eol = st.session_state.get("mod2_eol")
+
+    latest_run_row, latest_run_df = store.get_latest_run()
+    latest_eol = store.get_latest_module2_eol()
+    if latest_run_row is not None and (sim is None or "df" not in sim):
+        sim = {
+            "df": latest_run_df,
+            "kpis": {
+                "total_base": float(latest_run_row["total_base"]),
+                "total_eco": float(latest_run_row["total_eco"]),
+                "total_saving": float(latest_run_row["total_saving"]),
+                "pct_saving": float(latest_run_row["pct_saving"]),
+            },
+            "choices": {
+                "core": str(latest_run_row["core_choice"]),
+                "fluid": str(latest_run_row["fluid_choice"]),
+                "copper": str(latest_run_row["copper_choice"]),
+            },
+            "volumes": {
+                "dist": int(latest_run_row["vol_dist"]),
+                "med": int(latest_run_row["vol_med"]),
+                "large": int(latest_run_row["vol_large"]),
+            },
+        }
+    if latest_eol is not None and mod2_eol is None:
+        mod2_eol = {
+            "total_portfolio_kt": latest_eol["total_portfolio_kt"],
+            "total_units": latest_eol["total_units"],
+            "volumes": latest_eol["volumes"],
+        }
+
     if sim is None:
         st.info(
             "ℹ️ No Module 3 simulation found in this session. Using default volumes; "
             "Scope 3.1 rows will show '—' until you run Module 3."
+        )
+    else:
+        st.caption(
+            f"📂 Reporting from saved run **#{latest_run_row['run_id']}** · "
+            f"_{latest_run_row['name']}_ ({latest_run_row['created_at'][:10]})"
         )
 
     st.subheader("Step 1 — Production Volumes (annual)")

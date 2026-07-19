@@ -73,6 +73,53 @@ def load_factory_energy() -> pd.DataFrame:
     return pd.read_csv(DATA_DIR / "factory_energy.csv")
 
 
+@st.cache_data
+def load_benchmarks() -> pd.DataFrame:
+    """Per-family industry benchmark (kg CO₂e/kVA) sourced from EPDi EPDs.
+
+    Used by Module 3 to put the per-family kg CO₂e/kVA results in context
+    against the published EPDi averages for distribution and power
+    transformers. Stays as a sourced CSV (read-only) until the Phase 2
+    EPDi / One Click LCA data-feed partnership lands.
+    """
+    return pd.read_csv(DATA_DIR / "benchmarks.csv")
+
+
+def benchmarks_by_family() -> dict:
+    """``{family: {kg_co2e_per_kva, source, source_id, valid_to, notes}}``."""
+    df = load_benchmarks()
+    return {
+        row.family: {
+            "kg_co2e_per_kva": float(row.benchmark_kg_co2e_per_kva),
+            "source": str(row.source),
+            "source_id": str(row.source_id),
+            "valid_to": pd.to_datetime(row.valid_to).date(),
+            "notes": str(row.notes),
+        }
+        for row in df.itertuples()
+    }
+
+
+def benchmark_for_family(family: str) -> dict | None:
+    """Return the benchmark dict for ``family``, or ``None`` if not present."""
+    return benchmarks_by_family().get(family)
+
+
+def benchmark_validity() -> dict:
+    """Earliest benchmark expiry date and family(ies) expiring then.
+
+    Mirrors ``factor_validity()`` so the same freshness banner can surface
+    stale benchmark references at gate-review time.
+    """
+    df = load_benchmarks()
+    valid_to = pd.to_datetime(df["valid_to"])
+    earliest = valid_to.min()
+    return {
+        "earliest_expiry": earliest.date(),
+        "expiring_families": df.loc[valid_to == earliest, "family"].tolist(),
+    }
+
+
 def factory_energy_by_family() -> dict:
     """``{family: {gas_kwh_per_unit, electricity_kwh_per_unit}}`` for Module 4."""
     df = load_factory_energy()

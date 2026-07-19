@@ -57,12 +57,27 @@ def init_db() -> None:
                 results_json  TEXT    NOT NULL,
                 created_at    TEXT    NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS module2_eol (
+                eol_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                total_portfolio_kt REAL NOT NULL,
+                total_units   INTEGER NOT NULL,
+                volumes_json  TEXT    NOT NULL,
+                created_at    TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS app_preference (
+                key           TEXT PRIMARY KEY,
+                value         TEXT NOT NULL,
+                updated_at    TEXT NOT NULL
+            );
             """
         )
 
 
-def save_run(name: str, choices: dict, volumes: dict, kpis: dict,
-             results: pd.DataFrame) -> int:
+def save_run(
+    name: str, choices: dict, volumes: dict, kpis: dict, results: pd.DataFrame
+) -> int:
     """Persist a scenario + its simulation run. Returns the new run_id."""
     init_db()
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -72,8 +87,16 @@ def save_run(name: str, choices: dict, volumes: dict, kpis: dict,
                (name, core_choice, fluid_choice, copper_choice,
                 vol_dist, vol_med, vol_large, created_at)
                VALUES (?,?,?,?,?,?,?,?)""",
-            (name, choices["core"], choices["fluid"], choices["copper"],
-             volumes["dist"], volumes["med"], volumes["large"], now),
+            (
+                name,
+                choices["core"],
+                choices["fluid"],
+                choices["copper"],
+                volumes["dist"],
+                volumes["med"],
+                volumes["large"],
+                now,
+            ),
         )
         scenario_id = cur.lastrowid
         cur = conn.execute(
@@ -81,11 +104,17 @@ def save_run(name: str, choices: dict, volumes: dict, kpis: dict,
                (scenario_id, total_base, total_eco, total_saving,
                 pct_saving, results_json, created_at)
                VALUES (?,?,?,?,?,?,?)""",
-            (scenario_id, kpis["total_base"], kpis["total_eco"],
-             kpis["total_saving"], kpis["pct_saving"],
-             results.to_json(orient="records"), now),
+            (
+                scenario_id,
+                kpis["total_base"],
+                kpis["total_eco"],
+                kpis["total_saving"],
+                kpis["pct_saving"],
+                results.to_json(orient="records"),
+                now,
+            ),
         )
-        return cur.lastrowid
+        return cur.lastrowid  # type: ignore[return-value]
 
 
 def list_runs() -> pd.DataFrame:
@@ -128,3 +157,89 @@ def delete_run(run_id: int) -> None:
             conn.execute(
                 "DELETE FROM scenario WHERE scenario_id = ?", (row["scenario_id"],)
             )
+
+
+def get_latest_run() -> tuple[pd.Series | None, pd.DataFrame]:
+    """Return the most recent saved run plus its per-family results.
+
+    Returns ``(None, empty_df)`` when no run has been saved yet.
+    Powers Module 4's Scope 3.1 reporting so it survives tab refresh, multi-tab
+    and mobile views (no longer coupled to Streamlit session state).
+    """
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT r.run_id, s.name, s.created_at,
+                      s.core_choice, s.fluid_choice, s.copper_choice,
+                      s.vol_dist, s.vol_med, s.vol_large,
+                      r.total_base, r.total_eco, r.total_saving, r.pct_saving
+               FROM simulation_run r
+               JOIN scenario s ON s.scenario_id = r.scenario_id
+               ORDER BY r.run_id DESC
+               LIMIT 1"""
+        ).fetchone()
+    if row is None:
+        return None, pd.DataFrame()
+    return row, get_run_results(int(row["run_id"]))
+
+
+def save_module2_eol(total_portfolio_kt: float, total_units: int, volumes: dict) -> int:
+    """Persist Module 2's decommissioning-branch output for Module 4 retrieval.
+
+    Each call inserts a new row; ``get_latest_module2_eol`` returns the newest.
+    Mirrors the session-state ``mod2_eol`` shape in ``app.py``.
+    """
+    init_db()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO module2_eol
+               (total_portfolio_kt, total_units, volumes_json, created_at)
+               VALUES (?,?,?,?)""",
+            (total_portfolio_kt, total_units, json.dumps(volumes), now),
+        )
+        return cur.lastrowid  # type: ignore[return-value]
+
+
+def get_latest_module2_eol() -> dict | None:
+    """Return the most recent Module 2 EOL output, or ``None`` if none saved."""
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT total_portfolio_kt, total_units, volumes_json, created_at
+               FROM module2_eol
+               ORDER BY eol_id DESC
+               LIMIT 1"""
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "total_portfolio_kt": float(row["total_portfolio_kt"]),
+        "total_units": int(row["total_units"]),
+        "volumes": json.loads(row["volumes_json"]),
+        "created_at": row["created_at"],
+    }
+
+
+def set_preference(key: str, value: str) -> None:
+    """Upsert a single string preference (e.g. last-used cost ceiling)."""
+    init_db()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO app_preference (key, value, updated_at)
+               VALUES (?,?,?)
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                                               updated_at=excluded.updated_at""",
+            (key, value, now),
+        )
+
+
+def get_preference(key: str) -> str | None:
+    """Read a single string preference; ``None`` if never set."""
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT value FROM app_preference WHERE key = ?", (key,)
+        ).fetchone()
+    return None if row is None else str(row["value"])
