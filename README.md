@@ -12,7 +12,7 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 |--------|-------------|
 | **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
-| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. Engineers can compare a saved baseline with up to three alternatives in a design-gate view, with a transparent carbon-first recommendation, an optional **cost-ceiling constraint** to keep recommendations feasible for procurement, an **EPDi industry benchmark** column for context, cost trade-offs, uncertainty, and CSV export. |
+| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. A **constraint-aware design advisor** evaluates every core/fluid/copper combination and recommends the lowest-cost design that meets a minimum expected CO₂ reduction, annual green-premium cap, and approved-material rules. Engineers can apply the recommendation, simulate/save it, and compare saved designs with benchmarks, uncertainty, cost trade-offs, and CSV exports. |
 | **4. GHG Scope 1/2/3 Report** | Aggregates Modules 1–3 into a corporate GHG-Protocol reporting view (Scope 1 factory fuel, Scope 2 factory electricity, Scope 3 Cat 1 / 11 / 12). Includes editable per-family factory-energy inputs (`data/factory_energy.csv`) and CSV export. Scope 1 & 2 use Phase 1 indicative estimates until Phase 2 metered factory data. |
 
 ## Competitive position
@@ -35,8 +35,8 @@ streamlit run app.py
 
 ## Architecture
 
-The app separates the **model** (calculation logic in `app.py`) from the **data**
-(sourced coefficients, BOM masses, and saved runs). This is the key Phase 1
+The app separates the **model** (`design_engine.py`) from the **UI** (`app.py`) and
+the **data** (sourced coefficients, BOM masses, and saved runs). This is the key Phase 1
 design decision — every later phase (live PLM/EPD feeds, optimisation, assurance)
 plugs into the data layer without touching the UI or the calculation engine.
 
@@ -50,7 +50,8 @@ flowchart TD
     end
 
     subgraph LOGIC["⚙️ Calculation Engine"]
-        CALC["Bottom-up CO₂ calc<br/>(BOM mass × carbon intensity)"]
+        CALC["design_engine.py<br/>Bottom-up CO₂ calc"]
+        ADVISOR["Constraint-aware advisor<br/>Feasible-design search"]
     end
 
     subgraph DATA["📦 Data Layer"]
@@ -75,6 +76,8 @@ flowchart TD
     M1 --> CALC
     M2 --> CALC
     M3 --> CALC
+    M3 --> ADVISOR
+    ADVISOR --> CALC
     M4 -->|aggregate M1-M3 outputs| CALC
     CALC --> DL
     M3 -->|save / design-gate compare / export| SS
@@ -93,8 +96,12 @@ flowchart TD
 ```
 
 **Flow:** Module 3 reads carbon-intensity factors and BOM masses through
-`data_layer.py`, runs the bottom-up calculation, then persists named scenarios and
-their results through `scenario_store.py`. Module 2 reads the same BOM masses,
+`data_layer.py`, then uses `design_engine.py` for manual simulations and the
+constraint-aware advisor. The advisor evaluates every available material combination,
+filters on the three hard constraints, and ranks feasible designs by annual green
+premium (lower portfolio carbon breaks a cost tie). Applied recommendations enter the
+existing explicit simulation/save workflow; named scenarios and results persist through
+`scenario_store.py`. Module 2 reads the same BOM masses,
 baseline factors, and per-material recovery rates to quantify end-of-life recovery
 credits; Module 1 reads sourced energy assumptions and transformer presets to model
 use-phase cost and carbon. Module 4 is an **aggregation/reporting layer**: it

@@ -29,7 +29,7 @@ Today it is a Streamlit prototype with four modules mapped to lifecycle stages a
 |--------|-----------------|----------------|
 | **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via lifetime TCO, use-phase carbon savings, and payback |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Quantify retrofill vs. decommission trade-offs and the Module D recovery credit from sourced recovery rates |
-| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, including a design-gate comparison of one baseline and up to three alternatives |
+| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, including exhaustive constraint-aware recommendation and saved-run design-gate comparison |
 | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
 
 **Target users:** R&D / design engineers, sustainability leads, procurement & supply-chain
@@ -73,6 +73,13 @@ teams, and PLM gate reviewers.
   flagged and excluded from the recommendation (with the exclusion named in the success
   message). The seed of Phase 3's "constraint-aware design selection" shipped now
   because it unblocks procurement adoption of carbon-first choices.
+- ✅ **Constraint-aware design advisor** — exhaustively evaluates every selectable
+  core/fluid/copper combination against a minimum expected CO₂-reduction target, an
+  absolute annual green-premium cap, and approved-material lists. It recommends the
+  lowest-cost feasible design (lower carbon breaks a cost tie), explains every rejection,
+  exports the candidate matrix, and can populate Scenario B for explicit simulation and
+  saving. Loss-performance constraints remain pending until material choices have
+  defensible no-load and load-loss mappings.
 - ✅ Export per-family results (CSV) for gate reviews.
 - ✅ Quantify Module 2 end-of-life outcomes — avoided-replacement carbon (retrofill) and
   the Module D recovery credit — from a sourced `recovery_factors.csv`, with CSV export.
@@ -117,11 +124,10 @@ teams, and PLM gate reviewers.
 ### 🔮 Phase 3 — Decision Intelligence  *(9–18 mo)*
 **Theme: from calculator to advisor.**
 
-- **Constraint-aware design selection:** extend the Phase 1 cost-ceiling slider with
-  minimum carbon-reduction targets, loss-performance limits, and approved-material
-  constraints so recommendations remain feasible in an engineering gate. The cost
-  ceiling already ships today as the highest-leverage constraint; the rest follow
-  the same primitive.
+- **Constraint-aware design selection:** extend the shipped minimum carbon-reduction,
+  annual-premium, and approved-material constraints with loss-performance limits and
+  approved-supplier rules. Loss limits require design-specific no-load and load-loss
+  mappings; the current single Standard/Eco preset pair is not sufficient evidence.
 - **Abatement economics as the signature output:** extend the shipped per-lever €/t
   ranking into full **marginal abatement cost curves** (CO₂ vs. €) linking Module 1 +
   Module 3 — uncontested white space across all five competitors scanned.

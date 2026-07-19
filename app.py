@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 import data_layer as dl
+import design_engine as engine
 import scenario_store as store
 
 # Configure the app's layout and title
@@ -728,6 +729,11 @@ elif module == "3. Portfolio CO₂ Simulator ★":
     # Representative average BOM per transformer class [core_kg, cu_kg, oil_kg, insul_kg, struct_kg]
     BOM = dl.bom_by_family()
     KVA = dl.kva_by_family()
+    MATERIAL_OPTIONS = {
+        "core": CORE_OPTS,
+        "fluid": FLUID_OPTS,
+        "copper": COPPER_OPTS,
+    }
 
     # ── STEP 1 — VOLUME FORECAST ─────────────────────────────────────────────
     st.subheader("Step 1 — Portfolio Volume Forecast")
@@ -744,10 +750,251 @@ elif module == "3. Portfolio CO₂ Simulator ★":
     )
     volumes = [vol_dist, vol_med, vol_large]
 
-    # ── STEP 2 — DESIGN SCENARIO ─────────────────────────────────────────────
-    st.subheader("Step 2 — Configure Design Scenario")
+    # ── STEP 2 — CONSTRAINT-AWARE DESIGN ADVISOR ─────────────────────────────
+    st.subheader("Step 2 — Constraint-Aware Design Advisor")
     st.caption(
-        "Scenario A is fixed as today's standard BOM. Configure Scenario B (Eco-Efficient interventions)."
+        "Search every available material combination for the lowest-cost design "
+        "that meets your expected CO₂ target and procurement constraints."
+    )
+    constraint_col1, constraint_col2 = st.columns(2)
+    with constraint_col1:
+        min_reduction_pct = st.number_input(
+            "Minimum portfolio CO₂ reduction (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=20.0,
+            step=1.0,
+            format="%.1f",
+            key="advisor_min_reduction_pct",
+        )
+    with constraint_col2:
+        max_premium_k_eur = st.number_input(
+            "Maximum annual green premium (kEUR/year)",
+            min_value=0.0,
+            value=2_500.0,
+            step=100.0,
+            format="%.0f",
+            key="advisor_max_premium_k_eur",
+            help=(
+                "Maximum incremental material cost versus the current-BOM baseline. "
+                "Cost values are representative until replaced by procurement quotes."
+            ),
+        )
+
+    with st.expander("Approved material options", expanded=False):
+        approval_col1, approval_col2, approval_col3 = st.columns(3)
+        approved_core = approval_col1.multiselect(
+            "Approved core options",
+            options=list(CORE_OPTS),
+            default=list(CORE_OPTS),
+            key="advisor_approved_core",
+        )
+        approved_fluid = approval_col2.multiselect(
+            "Approved fluid options",
+            options=list(FLUID_OPTS),
+            default=list(FLUID_OPTS),
+            key="advisor_approved_fluid",
+        )
+        approved_copper = approval_col3.multiselect(
+            "Approved copper options",
+            options=list(COPPER_OPTS),
+            default=list(COPPER_OPTS),
+            key="advisor_approved_copper",
+        )
+
+    approved_materials = {
+        "core": approved_core,
+        "fluid": approved_fluid,
+        "copper": approved_copper,
+    }
+    advisor_inputs = {
+        "volumes": list(volumes),
+        "min_reduction_pct": float(min_reduction_pct),
+        "max_premium_k_eur": float(max_premium_k_eur),
+        "approved_materials": approved_materials,
+    }
+
+    if st.button(
+        "Find recommended design",
+        type="primary",
+        use_container_width=True,
+        key="run_design_advisor",
+    ):
+        empty_categories = [
+            category for category, approved in approved_materials.items() if not approved
+        ]
+        if empty_categories:
+            st.session_state.pop("design_advisor", None)
+            st.error(
+                "Keep at least one approved option in each category. Missing: "
+                + ", ".join(empty_categories)
+                + "."
+            )
+        else:
+            candidates = engine.evaluate_constrained_designs(
+                option_details=MATERIAL_OPTIONS,
+                approved_materials={
+                    category: set(approved)
+                    for category, approved in approved_materials.items()
+                },
+                min_reduction_pct=float(min_reduction_pct),
+                max_premium_k_eur=float(max_premium_k_eur),
+                volumes=volumes,
+                bom=BOM,
+                kva_by_family=KVA,
+                baseline=BASE,
+                insulation_baseline=INSUL_BASE,
+                structural_baseline=STRUCT_BASE,
+            )
+            feasible = candidates[candidates["Feasible?"]]
+            st.session_state["design_advisor"] = {
+                "inputs": advisor_inputs,
+                "candidates": candidates,
+                "winner": None if feasible.empty else feasible.iloc[0].to_dict(),
+            }
+
+    def apply_recommended_design() -> None:
+        advisor = st.session_state.get("design_advisor")
+        if advisor is None or advisor["winner"] is None:
+            return
+        winner = advisor["winner"]
+        st.session_state["scenario_core_choice"] = winner["Core"]
+        st.session_state["scenario_fluid_choice"] = winner["Fluid"]
+        st.session_state["scenario_copper_choice"] = winner["Copper"]
+        st.session_state["advisor_applied"] = True
+        st.session_state.pop("sim", None)
+
+    advisor = st.session_state.get("design_advisor")
+    if advisor is not None and advisor["inputs"] != advisor_inputs:
+        st.info("Volumes or constraints changed. Run the advisor again to refresh the recommendation.")
+    elif advisor is not None:
+        candidates = advisor["candidates"]
+        winner = advisor["winner"]
+        if winner is None:
+            st.warning(
+                "No material combination satisfies all active constraints. "
+                "Review the closest candidates below or relax a binding constraint."
+            )
+            failure_counts = {
+                "CO₂ target": int((~candidates["Passes CO₂ target?"]).sum()),
+                "premium cap": int((~candidates["Passes premium cap?"]).sum()),
+                "material approval": int(
+                    (~candidates["Uses approved materials?"]).sum()
+                ),
+            }
+            binding_summary = " · ".join(
+                f"{name}: {count} rejected"
+                for name, count in failure_counts.items()
+                if count > 0
+            )
+            st.caption(f"Constraint impact across evaluated designs — {binding_summary}.")
+            nearest = candidates.sort_values(
+                [
+                    "Failed constraints",
+                    "CO₂ target shortfall (pp)",
+                    "Premium cap excess (kEUR/yr)",
+                    "Portfolio carbon (kt/yr)",
+                ]
+            ).head(3)
+            st.markdown("**Closest available designs**")
+            st.dataframe(
+                nearest[
+                    [
+                        "Core",
+                        "Fluid",
+                        "Copper",
+                        "CO₂ reduction (%)",
+                        "Annual green premium (kEUR/yr)",
+                        "Exclusion reasons",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.success(
+                f"Recommended design: {winner['CO₂ reduction (%)']:.1f}% expected "
+                f"portfolio reduction at {winner['Annual green premium (kEUR/yr)']:.1f} "
+                "kEUR/year."
+            )
+            result_col1, result_col2, result_col3 = st.columns(3)
+            result_col1.metric(
+                "Expected portfolio carbon",
+                f"{winner['Portfolio carbon (kt/yr)']:.2f} kt CO₂e/yr",
+            )
+            result_col2.metric(
+                "Expected reduction", f"{winner['CO₂ reduction (%)']:.1f}%"
+            )
+            abatement_cost = winner["Abatement cost (EUR/tCO₂e)"]
+            result_col3.metric(
+                "Abatement cost",
+                f"€{abatement_cost:,.0f}/t CO₂e"
+                if pd.notna(abatement_cost)
+                else "n/a",
+            )
+            st.markdown(
+                f"**Core:** {winner['Core']}  \n"
+                f"**Fluid:** {winner['Fluid']}  \n"
+                f"**Copper:** {winner['Copper']}"
+            )
+            st.caption(
+                f"Factor uncertainty range: {winner['Expected low (kt/yr)']:.2f}–"
+                f"{winner['Expected high (kt/yr)']:.2f} kt CO₂e/yr. The target is "
+                "evaluated on expected factors; the range is not a target guarantee."
+            )
+            st.button(
+                "Apply recommended design to Scenario B",
+                on_click=apply_recommended_design,
+                use_container_width=True,
+                key="apply_advisor_design",
+            )
+            st.caption(
+                "Objective: lowest annual green premium that meets every hard constraint; "
+                "lower portfolio carbon breaks a cost tie. Applying does not run or save the scenario."
+            )
+
+        export_header = (
+            f"# Minimum expected CO2 reduction: {min_reduction_pct:.1f}%\n"
+            f"# Maximum annual green premium: {max_premium_k_eur:.1f} kEUR/year\n"
+            f"# Approved core: {' | '.join(approved_core)}\n"
+            f"# Approved fluid: {' | '.join(approved_fluid)}\n"
+            f"# Approved copper: {' | '.join(approved_copper)}\n"
+        ).encode("utf-8")
+        with st.expander(
+            f"Evaluated designs ({len(candidates)} combinations)", expanded=winner is None
+        ):
+            candidate_display = candidates.drop(
+                columns=[
+                    "Failed constraints",
+                    "CO₂ target shortfall (pp)",
+                    "Premium cap excess (kEUR/yr)",
+                ]
+            ).copy()
+            numeric_columns = [
+                "Portfolio carbon (kt/yr)",
+                "CO₂ reduction (%)",
+                "Annual green premium (kEUR/yr)",
+                "Abatement cost (EUR/tCO₂e)",
+                "Expected low (kt/yr)",
+                "Expected high (kt/yr)",
+            ]
+            for column in numeric_columns:
+                candidate_display[column] = candidate_display[column].map(
+                    lambda value: round(value, 2) if pd.notna(value) else "n/a"
+                )
+            st.dataframe(candidate_display, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Export advisor results (CSV)",
+                data=export_header + candidates.to_csv(index=False).encode("utf-8"),
+                file_name="constraint_aware_design_recommendation.csv",
+                mime="text/csv",
+                key="export_advisor_results",
+            )
+
+    # ── STEP 3 — DESIGN SCENARIO ─────────────────────────────────────────────
+    st.subheader("Step 3 — Review or Configure Design Scenario")
+    st.caption(
+        "Scenario A is fixed as today's standard BOM. Configure Scenario B manually or apply the advisor recommendation."
     )
 
     col_base, col_eco = st.columns(2)
@@ -761,154 +1008,53 @@ elif module == "3. Portfolio CO₂ Simulator ★":
     with col_eco:
         st.markdown("**Scenario B — Eco-Efficient Design Interventions**")
         core_choice = st.selectbox(
-            "Magnetic Core Material", list(CORE_OPTS.keys()), index=1
+            "Magnetic Core Material",
+            list(CORE_OPTS.keys()),
+            index=1,
+            key="scenario_core_choice",
         )
         fluid_choice = st.selectbox(
-            "Insulation Fluid", list(FLUID_OPTS.keys()), index=1
+            "Insulation Fluid",
+            list(FLUID_OPTS.keys()),
+            index=1,
+            key="scenario_fluid_choice",
         )
         copper_choice = st.selectbox(
-            "Copper Winding Sourcing", list(COPPER_OPTS.keys()), index=1
+            "Copper Winding Sourcing",
+            list(COPPER_OPTS.keys()),
+            index=1,
+            key="scenario_copper_choice",
         )
+        if st.session_state.pop("advisor_applied", False):
+            st.info("Advisor recommendation applied. Run the simulation to calculate and save it.")
 
-    # ── STEP 3 — RUN SIMULATION ───────────────────────────────────────────────
+    # ── STEP 4 — RUN SIMULATION ───────────────────────────────────────────────
     st.divider()
     if st.button(
         "▶  Run Portfolio CO₂ Simulation", type="primary", use_container_width=True
     ):
-        core_d = CORE_OPTS[core_choice]
-        fluid_d = FLUID_OPTS[fluid_choice]
-        copper_d = COPPER_OPTS[copper_choice]
-        core_b = BASE["core"]
-        fluid_b = BASE["fluid"]
-        copper_b = BASE["copper"]
-
-        rows = []
-        lever_cost = {"core": 0.0, "fluid": 0.0, "copper": 0.0}  # €/yr
-        for (family, masses), vol in zip(BOM.items(), volumes):
-            core_m, cu_m, oil_m, insul_m, struct_m = masses
-
-            # CO₂ per unit (tonnes), expected factors
-            base_unit = (
-                core_m * core_b["ci"]
-                + cu_m * copper_b["ci"]
-                + oil_m * fluid_b["ci"]
-                + insul_m * INSUL_BASE["ci"]
-                + struct_m * STRUCT_BASE["ci"]
-            ) / 1_000
-
-            eco_unit = (
-                core_m * core_d["ci"]
-                + cu_m * copper_d["ci"]
-                + oil_m * fluid_d["ci"]
-                + insul_m * INSUL_BASE["ci"]
-                + struct_m * STRUCT_BASE["ci"]
-            ) / 1_000
-
-            # Uncertainty bounds: all factors simultaneously at their low / high ends
-            base_low = (
-                core_m * core_b["low"]
-                + cu_m * copper_b["low"]
-                + oil_m * fluid_b["low"]
-                + insul_m * INSUL_BASE["low"]
-                + struct_m * STRUCT_BASE["low"]
-            ) / 1_000
-            base_high = (
-                core_m * core_b["high"]
-                + cu_m * copper_b["high"]
-                + oil_m * fluid_b["high"]
-                + insul_m * INSUL_BASE["high"]
-                + struct_m * STRUCT_BASE["high"]
-            ) / 1_000
-            eco_low = (
-                core_m * core_d["low"]
-                + cu_m * copper_d["low"]
-                + oil_m * fluid_d["low"]
-                + insul_m * INSUL_BASE["low"]
-                + struct_m * STRUCT_BASE["low"]
-            ) / 1_000
-            eco_high = (
-                core_m * core_d["high"]
-                + cu_m * copper_d["high"]
-                + oil_m * fluid_d["high"]
-                + insul_m * INSUL_BASE["high"]
-                + struct_m * STRUCT_BASE["high"]
-            ) / 1_000
-
-            # Lever contributions per unit (tonnes)
-            delta_core = (core_m * (core_b["ci"] - core_d["ci"])) / 1_000
-            delta_fluid = (oil_m * (fluid_b["ci"] - fluid_d["ci"])) / 1_000
-            delta_copper = (cu_m * (copper_b["ci"] - copper_d["ci"])) / 1_000
-
-            # Material cost uplift of the eco design (€/unit and €/yr per lever)
-            premium_unit = (
-                core_m * core_d["cost_delta"]
-                + cu_m * copper_d["cost_delta"]
-                + oil_m * fluid_d["cost_delta"]
-            )
-            lever_cost["core"] += core_m * core_d["cost_delta"] * vol
-            lever_cost["fluid"] += oil_m * fluid_d["cost_delta"] * vol
-            lever_cost["copper"] += cu_m * copper_d["cost_delta"] * vol
-
-            kva = KVA[family]
-
-            rows.append(
-                {
-                    "Product Family": family,
-                    "Units/yr": vol,
-                    "Baseline CO₂/unit (t)": round(base_unit, 1),
-                    "Eco-Efficient CO₂/unit (t)": round(eco_unit, 1),
-                    "Reduction/unit (t)": round(base_unit - eco_unit, 1),
-                    "Baseline kg CO₂e/kVA": round(base_unit * 1_000 / kva, 2),
-                    "Eco kg CO₂e/kVA": round(eco_unit * 1_000 / kva, 2),
-                    "Portfolio Baseline (kt/yr)": round(base_unit * vol / 1_000, 2),
-                    "Portfolio Eco-Efficient (kt/yr)": round(eco_unit * vol / 1_000, 2),
-                    "Portfolio Saving (kt/yr)": round(
-                        (base_unit - eco_unit) * vol / 1_000, 2
-                    ),
-                    "Baseline low (kt/yr)": round(base_low * vol / 1_000, 2),
-                    "Baseline high (kt/yr)": round(base_high * vol / 1_000, 2),
-                    "Eco low (kt/yr)": round(eco_low * vol / 1_000, 2),
-                    "Eco high (kt/yr)": round(eco_high * vol / 1_000, 2),
-                    "Green premium (k€/yr)": round(premium_unit * vol / 1_000, 1),
-                    "Δ Core (kt/yr)": round(delta_core * vol / 1_000, 3),
-                    "Δ Fluid (kt/yr)": round(delta_fluid * vol / 1_000, 3),
-                    "Δ Copper (kt/yr)": round(delta_copper * vol / 1_000, 3),
-                }
-            )
-
-        df = pd.DataFrame(rows)
-        total_base = df["Portfolio Baseline (kt/yr)"].sum()
-        total_eco = df["Portfolio Eco-Efficient (kt/yr)"].sum()
-        total_saving = total_base - total_eco
-        pct_saving = total_saving / total_base * 100
-        premium_eur = float(df["Green premium (k€/yr)"].sum() * 1_000)
-        blended = premium_eur / (total_saving * 1_000) if total_saving > 0 else None
-
-        st.session_state["sim"] = {
-            "df": df,
-            "kpis": {
-                "total_base": float(total_base),
-                "total_eco": float(total_eco),
-                "total_saving": float(total_saving),
-                "pct_saving": float(pct_saving),
+        simulation = engine.calculate_portfolio_design(
+            choices={
+                "core": core_choice,
+                "fluid": fluid_choice,
+                "copper": copper_choice,
             },
+            option_details=MATERIAL_OPTIONS,
+            volumes=volumes,
+            bom=BOM,
+            kva_by_family=KVA,
+            baseline=BASE,
+            insulation_baseline=INSUL_BASE,
+            structural_baseline=STRUCT_BASE,
+        )
+        st.session_state["sim"] = {
+            **simulation,
             "choices": {
                 "core": core_choice,
                 "fluid": fluid_choice,
                 "copper": copper_choice,
             },
             "volumes": {"dist": vol_dist, "med": vol_med, "large": vol_large},
-            "uncertainty": {
-                "base_low": float(df["Baseline low (kt/yr)"].sum()),
-                "base_high": float(df["Baseline high (kt/yr)"].sum()),
-                "eco_low": float(df["Eco low (kt/yr)"].sum()),
-                "eco_high": float(df["Eco high (kt/yr)"].sum()),
-            },
-            "cost": {
-                "premium_eur": premium_eur,
-                "blended_eur_per_t": blended,
-                "lever_costs": lever_cost,
-            },
         }
 
     # ── DISPLAY RESULTS (persisted across reruns via session_state) ──────────
@@ -2013,7 +2159,7 @@ elif module == "5. About & Source Code":
         |--------|-----------------|-------------|
         | **1. TCO & Carbon ROI** | B1–B6 (use phase) | Lifetime cost & carbon of standard vs. high-efficiency designs — NPV TCO, lifetime CO₂ savings, and payback |
         | **2. Circularity & EOL Planner** | C1–C4 + Module D | Retrofill vs. decommissioning trade-offs and Module D recovery credits from sourced recovery rates |
-        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon from BOM → portfolio, with factor-uncertainty bounds, kg CO₂e/kVA gate KPIs, and per-lever abatement cost (€/t CO₂e) |
+        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon plus constraint-aware recommendation across every material combination, with uncertainty, gate KPIs, and abatement cost |
         | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 outputs into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
         """
     )
@@ -2024,9 +2170,9 @@ elif module == "5. About & Source Code":
         """
         | Phase | Theme | Status | Key items |
         |-------|-------|--------|-----------|
-        | **1 — Foundation & Trust** | Make the numbers real and defensible | ✅ Done | Sourced CSV data layer, provenance + uncertainty, scenario save/compare/export, gate KPIs, €/t abatement ranking |
+        | **1 — Foundation & Trust** | Make the numbers real and defensible | ✅ Done | Sourced data, uncertainty, scenario comparison, gate KPIs, abatement ranking, constraint-aware advisor |
         | **2 — Real Data Integration** | Connect to live enterprise systems | 🔜 3–9 mo | Partner factor/EPD feeds (not a self-built database), real PLM/ERP BOM ingestion, full cradle-to-grave unification |
-        | **3 — Decision Intelligence** | From calculator to advisor | 🔮 9–18 mo | MAC curves as signature output, cost-optimal CO₂ targeting, gate-KPI artifacts, Monte Carlo sensitivity |
+        | **3 — Decision Intelligence** | From calculator to advisor | 🔮 9–18 mo | MAC curves, loss-performance and supplier constraints, gate-KPI artifacts, Monte Carlo sensitivity |
         | **4 — Platform & Scale** | Multi-user, governed, integrated | 🌐 18 mo+ | Open PLM-gate API (OpenEPD/ILCD-aligned), multi-tenant, third-party methodology validation |
         """
     )
