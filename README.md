@@ -12,7 +12,7 @@ A Streamlit prototype for evaluating and simulating CO₂ reduction across the t
 |--------|-------------|
 | **1. TCO & Carbon ROI** | Compares total cost of ownership and use-phase carbon (B1–B6) between standard and high-efficiency designs. Models loss energy from loading, discounts it to an NPV TCO, and derives lifetime CO₂ savings and payback. |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + Module D). Quantifies the avoided-replacement carbon of a mid-life retrofill and the Module D recovery credit from structured decommissioning, using sourced per-material recovery rates. |
-| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. A **constraint-aware design advisor** evaluates every core/fluid/copper combination and recommends the lowest-cost design that meets a minimum expected CO₂ reduction, annual green-premium cap, and approved-material rules. Engineers can apply the recommendation, simulate/save it, and compare saved designs with benchmarks, uncertainty, cost trade-offs, and CSV exports. |
+| **3. Portfolio CO₂ Simulator ★** | Bottom-up embodied carbon calculator (A1–A3 scope) — translates BOM material choices into fleet-wide CO₂ outcomes across product families and annual volumes. A **constraint-aware design advisor** evaluates every core/fluid/copper combination and recommends the lowest-cost design that meets a minimum expected CO₂ reduction, annual green-premium cap, and approved-material rules. Engineers can apply the recommendation, simulate/save it, and compare saved designs with benchmarks, uncertainty, cost trade-offs, and CSV exports. **Monte Carlo uncertainty analysis** propagates factor uncertainty through the portfolio model using probabilistic triangular sampling, producing P10/P50/P90 confidence intervals for portfolio CO₂, reduction %, per-family breakdowns, and per-lever attribution — replacing point-estimate-only uncertainty bounds with statistically robust distributions. |
 | **4. GHG Scope 1/2/3 Report** | Aggregates Modules 1–3 into a corporate GHG-Protocol reporting view (Scope 1 factory fuel, Scope 2 factory electricity, Scope 3 Cat 1 / 11 / 12). Includes editable per-family factory-energy inputs (`data/factory_energy.csv`) and CSV export. Scope 1 & 2 use Phase 1 indicative estimates until Phase 2 metered factory data. |
 
 ## Competitive position
@@ -52,6 +52,7 @@ flowchart TD
     subgraph LOGIC["⚙️ Calculation Engine"]
         CALC["design_engine.py<br/>Bottom-up CO₂ calc"]
         ADVISOR["Constraint-aware advisor<br/>Feasible-design search"]
+        MC["monte_carlo.py<br/>Probabilistic uncertainty"]
     end
 
     subgraph DATA["📦 Data Layer"]
@@ -77,7 +78,9 @@ flowchart TD
     M2 --> CALC
     M3 --> CALC
     M3 --> ADVISOR
+    M3 --> MC
     ADVISOR --> CALC
+    MC --> CALC
     M4 -->|aggregate M1-M3 outputs| CALC
     CALC --> DL
     M3 -->|save / design-gate compare / export| SS
@@ -101,7 +104,11 @@ constraint-aware advisor. The advisor evaluates every available material combina
 filters on the three hard constraints, and ranks feasible designs by annual green
 premium (lower portfolio carbon breaks a cost tie). Applied recommendations enter the
 existing explicit simulation/save workflow; named scenarios and results persist through
-`scenario_store.py`. Module 2 reads the same BOM masses,
+`scenario_store.py`. **Monte Carlo uncertainty analysis** (`monte_carlo.py`) propagates
+factor uncertainty through the portfolio model using probabilistic triangular sampling
+over sourced ranges, producing P10/P50/P90 confidence intervals for portfolio CO₂,
+reduction %, per-family breakdowns, and per-lever attribution — replacing point-estimate-only
+uncertainty bounds with statistically robust distributions. Module 2 reads the same BOM masses,
 baseline factors, and per-material recovery rates to quantify end-of-life recovery
 credits; Module 1 reads sourced energy assumptions and transformer presets to model
 use-phase cost and carbon. Module 4 is an **aggregation/reporting layer**: it

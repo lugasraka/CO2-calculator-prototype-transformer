@@ -7,6 +7,7 @@ import plotly.express as px
 
 import data_layer as dl
 import design_engine as engine
+import monte_carlo as mc
 import scenario_store as store
 
 # Configure the app's layout and title
@@ -821,7 +822,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
         key="run_design_advisor",
     ):
         empty_categories = [
-            category for category, approved in approved_materials.items() if not approved
+            category
+            for category, approved in approved_materials.items()
+            if not approved
         ]
         if empty_categories:
             st.session_state.pop("design_advisor", None)
@@ -866,7 +869,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
 
     advisor = st.session_state.get("design_advisor")
     if advisor is not None and advisor["inputs"] != advisor_inputs:
-        st.info("Volumes or constraints changed. Run the advisor again to refresh the recommendation.")
+        st.info(
+            "Volumes or constraints changed. Run the advisor again to refresh the recommendation."
+        )
     elif advisor is not None:
         candidates = advisor["candidates"]
         winner = advisor["winner"]
@@ -887,7 +892,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
                 for name, count in failure_counts.items()
                 if count > 0
             )
-            st.caption(f"Constraint impact across evaluated designs — {binding_summary}.")
+            st.caption(
+                f"Constraint impact across evaluated designs — {binding_summary}."
+            )
             nearest = candidates.sort_values(
                 [
                     "Failed constraints",
@@ -928,9 +935,7 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             abatement_cost = winner["Abatement cost (EUR/tCO₂e)"]
             result_col3.metric(
                 "Abatement cost",
-                f"€{abatement_cost:,.0f}/t CO₂e"
-                if pd.notna(abatement_cost)
-                else "n/a",
+                f"€{abatement_cost:,.0f}/t CO₂e" if pd.notna(abatement_cost) else "n/a",
             )
             st.markdown(
                 f"**Core:** {winner['Core']}  \n"
@@ -961,7 +966,8 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             f"# Approved copper: {' | '.join(approved_copper)}\n"
         ).encode("utf-8")
         with st.expander(
-            f"Evaluated designs ({len(candidates)} combinations)", expanded=winner is None
+            f"Evaluated designs ({len(candidates)} combinations)",
+            expanded=winner is None,
         ):
             candidate_display = candidates.drop(
                 columns=[
@@ -1026,7 +1032,9 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             key="scenario_copper_choice",
         )
         if st.session_state.pop("advisor_applied", False):
-            st.info("Advisor recommendation applied. Run the simulation to calculate and save it.")
+            st.info(
+                "Advisor recommendation applied. Run the simulation to calculate and save it."
+            )
 
     # ── STEP 4 — RUN SIMULATION ───────────────────────────────────────────────
     st.divider()
@@ -1346,6 +1354,216 @@ elif module == "3. Portfolio CO₂ Simulator ★":
             "Use-phase energy losses (B1–B6) → Module 1 | End-of-life (C1–C4) → Module 2 | "
             "Full cradle-to-grave integration: Phase 2 roadmap item."
         )
+
+        # ── MONTE CARLO UNCERTAINTY ANALYSIS ──────────────────────────────
+        st.divider()
+        st.subheader("🎲 Monte Carlo Uncertainty Analysis")
+        st.caption(
+            "Propagates factor uncertainty through the portfolio model using probabilistic "
+            "sampling instead of worst-case bounds. Each material's carbon intensity is drawn "
+            "from a triangular distribution (low → expected → high) across "
+            f"{mc.DEFAULT_ITERATIONS:,} iterations."
+        )
+
+        mc_col1, mc_col2 = st.columns([1, 3])
+        with mc_col1:
+            mc_iterations = st.selectbox(
+                "Iterations",
+                options=[1_000, 5_000, 10_000, 50_000],
+                index=2,
+                key="mc_iterations",
+            )
+        with mc_col2:
+            st.caption(
+                "More iterations produce smoother distributions but take longer. "
+                "10,000 is sufficient for stable P10/P50/P90 estimates."
+            )
+
+        if st.button(
+            "Run Monte Carlo Simulation",
+            type="primary",
+            use_container_width=True,
+            key="run_monte_carlo",
+        ):
+            with st.spinner(f"Running {mc_iterations:,} iterations..."):
+                mc_result = mc.run_monte_carlo(
+                    choices=sim["choices"],
+                    option_details=MATERIAL_OPTIONS,
+                    volumes=volumes,
+                    bom=BOM,
+                    kva_by_family=KVA,
+                    baseline=BASE,
+                    insulation_baseline=INSUL_BASE,
+                    structural_baseline=STRUCT_BASE,
+                    n_iterations=mc_iterations,
+                )
+            st.session_state["mc"] = mc_result
+
+        mc_sim = st.session_state.get("mc")
+        if mc_sim:
+            port = mc_sim["portfolio"]
+
+            st.markdown("**Portfolio confidence intervals (P10 / P50 / P90)**")
+            pk1, pk2, pk3, pk4 = st.columns(4)
+            pk1.metric(
+                "Baseline portfolio",
+                f"{port['baseline']['p50']:.2f} kt/yr",
+                delta=f"P10 {port['baseline']['p10']:.2f} — P90 {port['baseline']['p90']:.2f}",
+                delta_color="off",
+            )
+            pk2.metric(
+                "Eco-Efficient portfolio",
+                f"{port['eco']['p50']:.2f} kt/yr",
+                delta=f"P10 {port['eco']['p10']:.2f} — P90 {port['eco']['p90']:.2f}",
+                delta_color="off",
+            )
+            pk3.metric(
+                "Portfolio saving",
+                f"{port['saving']['p50']:.2f} kt/yr",
+                delta=f"P10 {port['saving']['p10']:.2f} — P90 {port['saving']['p90']:.2f}",
+                delta_color="off",
+            )
+            pk4.metric(
+                "Reduction %",
+                f"{port['reduction_pct']['p50']:.1f}%",
+                delta=f"P10 {port['reduction_pct']['p10']:.1f}% — P90 {port['reduction_pct']['p90']:.1f}%",
+                delta_color="off",
+            )
+
+            conf_low = port["reduction_pct"]["p10"]
+            conf_high = port["reduction_pct"]["p90"]
+            st.success(
+                f"**80% confidence interval:** The portfolio CO₂ reduction is between "
+                f"**{conf_low:.1f}%** and **{conf_high:.1f}%** (median {port['reduction_pct']['p50']:.1f}%). "
+                f"Based on {mc_sim['n_iterations']:,} Monte Carlo iterations with triangular "
+                f"distributions over sourced factor uncertainty ranges."
+            )
+
+            dists = mc_sim["distributions"]
+
+            st.markdown("**Portfolio CO₂ distribution — Eco-Efficient scenario**")
+            fig_hist = go.Figure()
+            fig_hist.add_trace(
+                go.Histogram(
+                    x=dists["portfolio_eco"],
+                    nbinsx=60,
+                    name="Eco-Efficient portfolio (kt/yr)",
+                    marker_color="#00CC96",
+                    opacity=0.75,
+                )
+            )
+            for pct_label, pct_val, dash in [
+                ("P10", port["eco"]["p10"], "dash"),
+                ("P50", port["eco"]["p50"], "solid"),
+                ("P90", port["eco"]["p90"], "dash"),
+            ]:
+                fig_hist.add_vline(
+                    x=pct_val,
+                    line_dash=dash,
+                    line_color="#636EFA",
+                    annotation_text=f"{pct_label}: {pct_val:.2f}",
+                    annotation_position="top right",
+                )
+            fig_hist.update_layout(
+                title="Eco-Efficient portfolio CO₂ distribution (kt CO₂e/yr)",
+                xaxis_title="kt CO₂e / year",
+                yaxis_title="Frequency",
+                plot_bgcolor="#0e1117",
+                paper_bgcolor="#0e1117",
+                font_color="white",
+                height=380,
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+            st.markdown("**Reduction % distribution**")
+            fig_red = go.Figure()
+            fig_red.add_trace(
+                go.Histogram(
+                    x=dists["reduction_pct"],
+                    nbinsx=60,
+                    name="Reduction %",
+                    marker_color="#636EFA",
+                    opacity=0.75,
+                )
+            )
+            for pct_label, pct_val, dash in [
+                ("P10", port["reduction_pct"]["p10"], "dash"),
+                ("P50", port["reduction_pct"]["p50"], "solid"),
+                ("P90", port["reduction_pct"]["p90"], "dash"),
+            ]:
+                fig_red.add_vline(
+                    x=pct_val,
+                    line_dash=dash,
+                    line_color="#EF553B",
+                    annotation_text=f"{pct_label}: {pct_val:.1f}%",
+                    annotation_position="top right",
+                )
+            fig_red.update_layout(
+                title="Portfolio CO₂ reduction % distribution",
+                xaxis_title="Reduction (%)",
+                yaxis_title="Frequency",
+                plot_bgcolor="#0e1117",
+                paper_bgcolor="#0e1117",
+                font_color="white",
+                height=380,
+            )
+            st.plotly_chart(fig_red, use_container_width=True)
+
+            st.markdown("**Per-family Monte Carlo summary**")
+            fam_rows = []
+            for fam_name, fam_data in mc_sim["families"].items():
+                fam_rows.append(
+                    {
+                        "Product Family": fam_name,
+                        "Baseline P10 (kt/yr)": round(fam_data["baseline"]["p10"], 3),
+                        "Baseline P50 (kt/yr)": round(fam_data["baseline"]["p50"], 3),
+                        "Baseline P90 (kt/yr)": round(fam_data["baseline"]["p90"], 3),
+                        "Eco P10 (kt/yr)": round(fam_data["eco"]["p10"], 3),
+                        "Eco P50 (kt/yr)": round(fam_data["eco"]["p50"], 3),
+                        "Eco P90 (kt/yr)": round(fam_data["eco"]["p90"], 3),
+                        "Saving P10 (kt/yr)": round(fam_data["saving"]["p10"], 3),
+                        "Saving P50 (kt/yr)": round(fam_data["saving"]["p50"], 3),
+                        "Saving P90 (kt/yr)": round(fam_data["saving"]["p90"], 3),
+                    }
+                )
+            fam_df = pd.DataFrame(fam_rows).set_index("Product Family")
+            st.dataframe(fam_df, use_container_width=True)
+
+            st.markdown("**Lever attribution — confidence intervals**")
+            lever_rows = []
+            for lever_name, lever_key in [
+                ("Core material", "core"),
+                ("Insulation fluid", "fluid"),
+                ("Copper sourcing", "copper"),
+            ]:
+                lev = mc_sim["levers"][lever_key]
+                lever_rows.append(
+                    {
+                        "Design lever": lever_name,
+                        "Saving P10 (kt/yr)": round(lev["p10"], 3),
+                        "Saving P50 (kt/yr)": round(lev["p50"], 3),
+                        "Saving P90 (kt/yr)": round(lev["p90"], 3),
+                    }
+                )
+            lever_df = pd.DataFrame(lever_rows).sort_values(
+                "Saving P50 (kt/yr)", ascending=False
+            )
+            st.dataframe(lever_df, use_container_width=True, hide_index=True)
+
+            mc_export = fam_df.reset_index()
+            st.download_button(
+                "Export Monte Carlo results (CSV)",
+                data=mc_export.to_csv(index=False).encode("utf-8"),
+                file_name="monte_carlo_uncertainty_results.csv",
+                mime="text/csv",
+                key="export_monte_carlo",
+            )
+            st.caption(
+                "Sampling method: triangular distribution per material factor "
+                "(low → expected → high). All five component factors are sampled "
+                "independently per iteration. P10/P90 represent the 80% confidence "
+                "interval; P50 is the median (most likely outcome)."
+            )
 
         # ── SAVE & EXPORT THIS RUN ────────────────────────────────────────
         st.divider()
@@ -2159,7 +2377,7 @@ elif module == "5. About & Source Code":
         |--------|-----------------|-------------|
         | **1. TCO & Carbon ROI** | B1–B6 (use phase) | Lifetime cost & carbon of standard vs. high-efficiency designs — NPV TCO, lifetime CO₂ savings, and payback |
         | **2. Circularity & EOL Planner** | C1–C4 + Module D | Retrofill vs. decommissioning trade-offs and Module D recovery credits from sourced recovery rates |
-        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon plus constraint-aware recommendation across every material combination, with uncertainty, gate KPIs, and abatement cost |
+        | **3. Portfolio CO₂ Simulator ★** | A1–A3 (cradle-to-gate) | Bottom-up embodied carbon plus constraint-aware recommendation across every material combination, with uncertainty, gate KPIs, abatement cost, and Monte Carlo probabilistic confidence intervals (P10/P50/P90) |
         | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 outputs into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
         """
     )
@@ -2170,9 +2388,9 @@ elif module == "5. About & Source Code":
         """
         | Phase | Theme | Status | Key items |
         |-------|-------|--------|-----------|
-        | **1 — Foundation & Trust** | Make the numbers real and defensible | ✅ Done | Sourced data, uncertainty, scenario comparison, gate KPIs, abatement ranking, constraint-aware advisor |
+        | **1 — Foundation & Trust** | Make the numbers real and defensible | ✅ Done | Sourced data, uncertainty, scenario comparison, gate KPIs, abatement ranking, constraint-aware advisor, Monte Carlo uncertainty analysis |
         | **2 — Real Data Integration** | Connect to live enterprise systems | 🔜 3–9 mo | Partner factor/EPD feeds (not a self-built database), real PLM/ERP BOM ingestion, full cradle-to-grave unification |
-        | **3 — Decision Intelligence** | From calculator to advisor | 🔮 9–18 mo | MAC curves, loss-performance and supplier constraints, gate-KPI artifacts, Monte Carlo sensitivity |
+        | **3 — Decision Intelligence** | From calculator to advisor | 🔮 9–18 mo | MAC curves, loss-performance and supplier constraints, gate-KPI artifacts, optimisation solvers |
         | **4 — Platform & Scale** | Multi-user, governed, integrated | 🌐 18 mo+ | Open PLM-gate API (OpenEPD/ILCD-aligned), multi-tenant, third-party methodology validation |
         """
     )
@@ -2182,7 +2400,12 @@ elif module == "5. About & Source Code":
             **✅ Phase 1 — Foundation & Trust (current):** sourced CSV data layer (`data/` via
             `data_layer.py`) with provenance, uncertainty ranges and validity dates; scenario
             save/compare/export (SQLite); uncertainty bounds, kg CO₂e/kVA gate KPI, per-lever
-            €/t abatement cost, and a data-freshness banner in outputs.
+            €/t abatement cost, constraint-aware design advisor, and a data-freshness banner
+            in outputs. **Monte Carlo uncertainty analysis** propagates factor uncertainty
+            through the portfolio model using probabilistic triangular sampling over sourced
+            ranges, producing P10/P50/P90 confidence intervals for portfolio CO₂, reduction %,
+            per-family breakdowns, and per-lever attribution — replacing point-estimate-only
+            uncertainty bounds with statistically robust distributions.
 
             **🔜 Phase 2 — Real Data Integration (3–9 mo):** partner factor/EPD feeds behind the
             same data-layer interface (evaluate sustamize's factor API, One Click LCA's
@@ -2193,7 +2416,8 @@ elif module == "5. About & Source Code":
             **🔮 Phase 3 — Decision Intelligence (9–18 mo):** per-lever €/t ranking extended to
             full marginal abatement cost curves (linking Modules 1 + 3); cost-optimal lever
             selection ("hit −30% CO₂ at minimum cost"); exportable gate-KPI artifacts;
-            Monte Carlo over uncertainty ranges; SBTi targets as constraints only.
+            optimisation solvers with loss-performance and supplier constraints; SBTi targets
+            as constraints only.
 
             **🌐 Phase 4 — Platform & Scale (18 mo+):** multi-tenant role-based access; narrow
             open gate API with OpenEPD/ILCD-aligned exports; third-party methodology validation

@@ -29,7 +29,7 @@ Today it is a Streamlit prototype with four modules mapped to lifecycle stages a
 |--------|-----------------|----------------|
 | **1. TCO & Carbon ROI** | Use-phase (B1–B6) | Justify high-efficiency units via lifetime TCO, use-phase carbon savings, and payback |
 | **2. Circularity & EOL Planner** | End-of-life (C1–C4 + D) | Quantify retrofill vs. decommission trade-offs and the Module D recovery credit from sourced recovery rates |
-| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, including exhaustive constraint-aware recommendation and saved-run design-gate comparison |
+| **3. Portfolio CO₂ Simulator ★** | Cradle-to-gate (A1–A3) | Bottom-up embodied carbon from BOM → portfolio, including exhaustive constraint-aware recommendation, saved-run design-gate comparison, and Monte Carlo probabilistic confidence intervals (P10/P50/P90) |
 | **4. GHG Scope 1/2/3 Report** | Corporate (Scope 1 + 2 + 3.1/3.11/3.12) | Rebuckets Modules 1–3 into GHG-Protocol scopes for CSRD/SBTi-style annual corporate reporting; Scope 1 & 2 use indicative factory-energy estimates (`data/factory_energy.csv`) until Phase 2 metered data |
 
 **Target users:** R&D / design engineers, sustainability leads, procurement & supply-chain
@@ -94,6 +94,15 @@ teams, and PLM gate reviewers.
   next to an EPDi average from `data/benchmarks.csv` (n, source EPDs, validity dates
   documented). Without context a gate KPI is a number in a vacuum; the benchmark is the
   fix. Replace static CSV with the EPDi data feed in Phase 2.
+- ✅ **Monte Carlo uncertainty analysis** — propagates factor uncertainty through the
+  portfolio model using probabilistic triangular sampling over sourced ranges
+  (`uncertainty_low` → `kg_co2e_per_kg` → `uncertainty_high`). Produces P10/P50/P90
+  confidence intervals for portfolio baseline, eco-efficient, saving, reduction %,
+  per-family breakdowns, and per-lever attribution. Replaces point-estimate-only
+  uncertainty bounds with statistically robust distributions. Histogram visualisations
+  show the full distribution with percentile markers. Configurable iterations (1K–50K)
+  and CSV export. Engine is pure NumPy (`monte_carlo.py`) — no Streamlit dependency —
+  so it can be unit-tested and reused by the design advisor in future phases.
 - ✅ Module 4 GHG Scope 1/2/3 reporting view — rebuckets Modules 1–3 outputs into
   GHG-Protocol scopes (1, 2, 3.1, 3.11, 3.12), with editable per-family factory-energy
   inputs (`data/factory_energy.csv`) for indicative Scope 1 & 2 estimates until Phase 2
@@ -133,7 +142,8 @@ teams, and PLM gate reviewers.
   Module 3 — uncontested white space across all five competitors scanned.
 - **Optimisation:** "hit −30% CO₂ at minimum cost" — a solver selects material levers.
 - **Gate-KPI artifacts:** exportable kg CO₂e/kVA pass/fail objects for PLM design reviews.
-- Sensitivity / what-if analysis and Monte Carlo over the uncertainty ranges.
+- Extend Monte Carlo to correlate factor uncertainties (e.g. steel and copper from the
+  same supplier programme) and propagate through marginal abatement cost curves.
 - SBTi targets enter only as *constraints* on portfolio scenarios — corporate-target
   tooling is deliberately left to corporate-carbon platforms (carbmee, Makersite, Sphera).
 
